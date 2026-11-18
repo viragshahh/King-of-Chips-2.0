@@ -19,6 +19,7 @@ type QuizData = {
   is_admin: boolean;
   attempt: any;
   questions: Question[];
+  admin_questions?: (Question & { correct_option: string; category: string; best_cards: CardData[] })[];
   leaderboard: any[];
   participants: any[];
   last_round_result?: any;
@@ -303,12 +304,12 @@ function App() {
             <div className="submission-track"><div style={{width: ((quiz?.round?.total_participants ? (quiz.round.submitted_count/quiz.round.total_participants)*100 : 0)) + "%"}}/></div>
             <div className="round-monitor-foot">{roundPhase === "question" ? (quiz?.round?.seconds_remaining || 0) + " seconds remaining · Answers lock individually" : roundPhase === "leaderboard" ? "Next question in " + (quiz?.round?.leaderboard_seconds_remaining || 0) + " seconds" : "All rounds complete"}</div>
           </div>}
-          {quizStatus === "live" && quiz?.questions?.[questionIndex] && <div className="glass-card admin-live-question">
+          {quizStatus === "live" && quiz?.admin_questions?.[questionIndex] && <div className="glass-card admin-live-question">
             <div className="section-kicker">LIVE QUESTION PREVIEW · ROUND {questionIndex+1}/20</div>
             <div className="admin-question-top"><h3>{roundPhase === "leaderboard" ? "ROUND ANSWER REVEAL" : "CURRENT QUESTION"}</h3><span>{quiz?.round?.seconds_remaining || 0}s LEFT</span></div>
-            <div className="admin-hole-cards">{quiz.questions[questionIndex].hole_cards.map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="normal" delay={i*70}/>)}</div>
-            <div className="admin-options-grid">{quiz.questions[questionIndex].options.map((o:OptionData)=><div key={o.label} className={"admin-option " + (roundPhase === "leaderboard" && o.label === (quiz?.last_round_result?.correct_option || "") ? "admin-option-correct" : "")}><b>{o.label}</b><div>{o.cards.map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*30}/>)}</div>{roundPhase === "leaderboard" && o.label === quiz?.last_round_result?.correct_option && <small>✓ CORRECT ANSWER</small>}</div>)}</div>
-            {roundPhase === "leaderboard" && <div className="admin-answer-key">Correct answer: <b>{quiz?.questions?.[questionIndex]?.options?.find((o:OptionData)=>o.label===quiz?.last_round_result?.correct_option)?.label || "See official key"}</b> · {quiz?.last_round_result?.category || ""}</div>}
+            <div className="admin-hole-cards">{quiz.admin_questions[questionIndex].hole_cards.map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="normal" delay={i*70}/>)}</div>
+            <div className="admin-options-grid">{quiz.admin_questions[questionIndex].options.map((o:OptionData)=><div key={o.label} className={"admin-option " + (roundPhase === "leaderboard" && o.label === (quiz?.admin_questions?.[questionIndex]?.correct_option || "") ? "admin-option-correct" : "")}><b>{o.label}</b><div>{o.cards.map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*30}/>)}</div>{roundPhase === "leaderboard" && o.label === quiz?.admin_questions?.[questionIndex]?.correct_option && <small>✓ CORRECT ANSWER</small>}</div>)}</div>
+            {roundPhase === "leaderboard" && <div className="admin-answer-key">Correct answer: <b>{quiz?.admin_questions?.[questionIndex]?.correct_option || "—"}</b> · {quiz?.admin_questions?.[questionIndex]?.category || ""}</div>}
           </div>}
           <div className="admin-submission-list">
             <div className="admin-section-head"><h3>ROUND SUBMISSIONS</h3><span>{quiz?.round?.submitted_count || 0} / {quiz?.round?.total_participants || 0} LOCKED</span></div>
