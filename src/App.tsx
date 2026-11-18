@@ -21,6 +21,7 @@ type QuizData = {
   questions: Question[];
   leaderboard: any[];
   participants: any[];
+  round?: { phase: string; current_index: number; submitted_count: number; total_participants: number; seconds_remaining: number; leaderboard_seconds_remaining: number };
 };
 
 const rank = (r: number) => ({ 14: "A", 13: "K", 12: "Q", 11: "J" } as Record<number, string>)[r] || String(r);
