@@ -64,9 +64,10 @@ Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:cors});
   try{
     const token=(req.headers.get("Authorization")||"").replace("Bearer ","");
-    const {data:userData,error:userError}=await db.auth.getUser(token);
-    if(userError||!userData.user)return out({error:"A participant session is required."},401);
-    const uid=userData.user.id,b=await req.json();
+    const {data:claimsData,error:userError}=await db.auth.getClaims(token);
+    const uid=claimsData?.claims?.sub as string | undefined;
+    if(userError||!uid)return out({error:"A participant session is required."},401);
+    const b=await req.json();
     const {data:t,error:te}=await db.from("tournaments").select("*").order("created_at",{ascending:true}).limit(1).maybeSingle();
     if(te||!t)return out({error:"Tournament configuration was not found."},500);
     const {data:profile}=await db.from("profiles").select("role").eq("user_id",uid).maybeSingle();
