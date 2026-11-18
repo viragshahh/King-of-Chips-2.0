@@ -146,7 +146,7 @@ Deno.serve(async(req:Request)=>{
         speed_bonus:answer.correct?Math.max(0,Math.ceil((seconds*1000-Number(answer.response_ms||0))/1000)):0,
         timed_out:!answer.selected_option,best_cards:questions[idx]?.best_cards||[]
       }:null;
-      return out({tournament:{id:t.id,status:t.status,name:t.name},settings,team,is_admin:isAdmin,attempt,questions:publicQuestions,leaderboard:board,participants:participantProgress,last_round_result:lastRoundResult,round:{phase:settings.phase,current_index:idx,submitted_count:submitted,total_participants:attempts.length,seconds_remaining:remaining,leaderboard_seconds_remaining:settings.phase==="leaderboard"&&settings.phase_started_at?Math.max(0,5-Math.floor((Date.now()-new Date(settings.phase_started_at).getTime())/1000)):0}});
+      return out({tournament:{id:t.id,status:t.status,name:t.name},settings,team,is_admin:isAdmin,attempt,questions:publicQuestions,admin_questions:isAdmin?questions:undefined,leaderboard:board,participants:participantProgress,last_round_result:lastRoundResult,round:{phase:settings.phase,current_index:idx,submitted_count:submitted,total_participants:attempts.length,seconds_remaining:remaining,leaderboard_seconds_remaining:settings.phase==="leaderboard"&&settings.phase_started_at?Math.max(0,5-Math.floor((Date.now()-new Date(settings.phase_started_at).getTime())/1000)):0}});
     }
     if(b.action==="admin_delete_participant"){
       requireAdmin();
