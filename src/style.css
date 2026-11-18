@@ -256,3 +256,34 @@ button:disabled{opacity:.48;cursor:not-allowed}
 .registration-qr-url{margin-top:12px;color:#d8c27f;font:10px 'DM Mono';overflow-wrap:anywhere}
 .registration-open-link{margin-top:12px;text-decoration:none}
 @media(max-width:600px){.registration-qr-image img{width:190px;height:190px}}
+
+
+/* Projector mode */
+.projector-screen{width:100%;min-height:calc(100vh - 30px);padding:26px 3vw 40px;display:flex;flex-direction:column;gap:24px}
+.projector-top{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #b89a5644;padding:0 1vw 18px}
+.projector-live{display:flex;align-items:center;gap:9px;color:#8ee0a0;font:700 12px 'DM Mono';letter-spacing:1.5px}
+.projector-live span{width:9px;height:9px;border-radius:50%;background:#5dd18b;box-shadow:0 0 14px #5dd18b;animation:pulse 1.4s infinite}
+.projector-question{width:min(1180px,100%);margin:0 auto;padding:24px 28px;background:linear-gradient(145deg,#13251b,#0d1b14);border:1px solid #b99a5a66;border-radius:16px;box-shadow:0 20px 70px #0006}
+.projector-question-head{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.projector-question-head h1,.projector-hold h1{font:800 clamp(30px,4vw,54px) 'Playfair Display';margin:7px 0;color:#f5f0e3}
+.projector-countdown{min-width:120px;padding:14px 18px}.projector-countdown b{font-size:34px}
+.projector-progress{height:6px;background:#293c2f;border-radius:9px;margin:20px 0;overflow:hidden}
+.projector-progress>div{height:100%;background:linear-gradient(90deg,#8b6b35,#e7ce87);transition:width .3s}
+.projector-private{max-width:540px;margin:0 auto;padding:18px 22px;border:1px solid #9f874766;border-radius:10px;background:radial-gradient(ellipse at 50% 0,#1d3a28,#102219 70%)}
+.projector-private .playing-card.large{width:88px;height:120px;padding:10px 12px}
+.projector-private .playing-card.large b{font-size:33px}.projector-private .playing-card.large strong{font-size:40px}
+.projector-instruction{text-align:center;color:#e1e6dc;font-size:clamp(15px,1.5vw,20px);margin:22px 0 16px}
+.projector-options{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.projector-option{display:flex;align-items:center;justify-content:center;gap:15px;padding:14px 12px;background:#0b1b11;border:1px solid #52664f;border-radius:10px}
+.projector-option>b{width:36px;height:36px;display:grid;place-items:center;border-radius:7px;background:#263a2b;border:1px solid #6c794e;color:#e6cf8e;font:700 17px 'DM Mono';flex:none}
+.projector-option>div{display:flex;gap:7px;justify-content:center}
+.projector-option .playing-card.normal{width:clamp(54px,6vw,72px);height:clamp(76px,8vw,98px);padding:8px}
+.projector-option .playing-card.normal b{font-size:23px}.projector-option .playing-card.normal strong{font-size:27px}
+.projector-bottom{display:flex;justify-content:space-between;gap:12px;margin-top:20px;padding-top:14px;border-top:1px solid #ffffff18;color:#d9c27f;font:11px 'DM Mono';letter-spacing:1px}
+.projector-hold{width:min(1000px,100%);margin:auto;text-align:center;padding:50px 20px}
+.projector-hold p,.projector-board>p{color:#aebcaf;font-size:17px}
+.projector-board{width:min(1000px,100%);margin:0 auto;text-align:center}
+.projector-board>h1{display:flex;align-items:center;justify-content:center;gap:14px;color:#f2d58a;font:800 clamp(30px,4vw,48px) 'Playfair Display';margin:10px 0}
+.projector-board>.leaderboard-card,.projector-hold>.leaderboard-card{max-width:850px;margin:22px auto;text-align:left;padding:24px}
+.projector-board .leader-row{padding:14px 8px}.projector-board .leader-name b{font-size:16px}.projector-board .leader-name small{font-size:12px}.projector-board .leader-points b{font-size:19px}.projector-board .leader-points small{font-size:10px}
+@media(max-width:700px){.projector-screen{padding:18px 3vw}.projector-top{align-items:flex-start;gap:12px}.projector-live{font-size:9px}.projector-question{padding:17px 12px}.projector-options{grid-template-columns:1fr}.projector-option{justify-content:flex-start}.projector-option .playing-card.normal{width:48px;height:67px}.projector-option .playing-card.normal b{font-size:17px}.projector-option .playing-card.normal strong{font-size:19px}.projector-bottom{font-size:8px;flex-direction:column}.projector-countdown{min-width:88px;padding:9px}.projector-countdown b{font-size:25px}}
