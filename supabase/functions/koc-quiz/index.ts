@@ -228,7 +228,7 @@ Deno.serve(async(req:Request)=>{
       const correctQuips=["CERTIFIED JUWARI!","TABLE KA ASLI SIKANDAR!","DEALER BHI SALUTE MAARE!","CHIPS KI BAARISH, BOSS!","AAJ TOH KISMAT ALL-IN HAI!","POKER FACE, PERFECT ACE!","CASINO KO GHAR BEJH DIYA!","YEH HAATH NAHI, MASTERCLASS THI!","FULL HOUSE OF TALENT!","BOSS LEVEL JUWARI!","BAAP RE BAAP, KYA HAND HAI!","SEAT BELT BAANDH, SHARK AAYA!"];
       const wrongQuips=["DOOB GAYE SAARE PAISE!","YEH HAATH NAHI, HEARTBREAK THA!","DEALER NE AANKHON MEIN DHOOL JHOK DI!","CHIPS GAYE TEL LENE!","BLUFF BHI NAHI CHALA!","POKER FACE THA, PAR ANSWER WRONG!","TABLE NE AAPKO FOLD KAR DIYA!","KISMAT NE BHI DISCONNECT KAR DIYA!","ALL-IN GAYE, ALL-OUT AAYE!","AAJ CARDS AAPKE SAATH NAHI HAIN!","YEH MOVE DEKH KE DEALER BHI RO DIYA!","JEB GARMAI NAHI, KHALI HO GAYI!"];
       const quips=correct?correctQuips:wrongQuips;
-      return out({accepted:true,locked:true,correct,correct_option:q.correct_option,category:q.category,best_cards:q.best_cards,points_earned:pointsEarned,speed_bonus:speedBonus,quip:quips[Math.floor(Math.random()*quips.length)],attempt:{score:updated.score,correct_count:updated.correct_count,last_submitted_index:updated.last_submitted_index}});
+      return out({accepted:true,locked:true,selected_option:selected,correct,correct_option:q.correct_option,category:q.category,best_cards:q.best_cards,points_earned:pointsEarned,speed_bonus:speedBonus,quip:quips[Math.floor(Math.random()*quips.length)],attempt:{score:updated.score,correct_count:updated.correct_count,last_submitted_index:updated.last_submitted_index}});
     }
     return out({error:"Unknown quiz action."},400);
   }catch(e){return out({error:e instanceof Error?e.message:"Unexpected server error."},500);}
