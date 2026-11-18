@@ -63,10 +63,20 @@ const publicQuestions=questions.map(({id,hole_cards,options})=>({id,hole_cards,o
 Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:cors});
   try{
-    const token=(req.headers.get("Authorization")||"").replace("Bearer ","");
-    const {data:claimsData,error:userError}=await db.auth.getClaims(token);
-    const uid=claimsData?.claims?.sub as string | undefined;
-    if(userError||!uid)return out({error:"A participant session is required."},401);
+    // The Edge Function gateway validates the JWT signature before this handler runs
+    // (verify_jwt=true). Decode only the verified subject here; avoid a second Auth
+    // network lookup on every participant state poll.
+    const token=(req.headers.get("Authorization")||"").replace(/^Bearer\\s+/i,"");
+    const payloadPart=token.split(".")[1];
+    let uid:string|undefined;
+    try{
+      if(payloadPart){
+        const normalized=payloadPart.replace(/-/g,"+").replace(/_/g,"/");
+        const padded=normalized+"=".repeat((4-normalized.length%4)%4);
+        uid=JSON.parse(atob(padded)).sub;
+      }
+    }catch{}
+    if(!uid)return out({error:"A participant session is required."},401);
     const b=await req.json();
     const [{data:t,error:te},{data:profile}]=await Promise.all([
       db.from("tournaments").select("*").order("created_at",{ascending:true}).limit(1).maybeSingle(),
