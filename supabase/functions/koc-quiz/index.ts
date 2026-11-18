@@ -138,7 +138,15 @@ Deno.serve(async(req:Request)=>{
       const remaining=settings.phase==="question"&&settings.question_started_at?Math.max(0,Math.ceil((new Date(settings.question_started_at).getTime()+seconds*1000-Date.now())/1000)):0;
       const board=await leaderboard();
       const participants=isAdmin?(await db.from("teams").select("id,team_name,captain_name,status,created_at").eq("tournament_id",t.id).order("created_at")).data||[]:[];
-      return out({tournament:{id:t.id,status:t.status,name:t.name},settings,team,is_admin:isAdmin,attempt,questions:publicQuestions,leaderboard:board,participants,round:{phase:settings.phase,current_index:idx,submitted_count:submitted,total_participants:attempts.length,seconds_remaining:remaining,leaderboard_seconds_remaining:settings.phase==="leaderboard"&&settings.phase_started_at?Math.max(0,5-Math.floor((Date.now()-new Date(settings.phase_started_at).getTime())/1000)):0}});
+      const participantProgress=isAdmin?participants.map((p:any)=>{const a=attempts.find((x:any)=>x.team_id===p.id);return {...p,has_submitted:!!a&&Number(a.last_submitted_index)>=idx,attempt_status:a?.status||"not_started"};}):[];
+      const answer=attempt?.answers?.[idx]||null;
+      const lastRoundResult=attempt&&Number(attempt.last_submitted_index)>=idx&&answer?{
+        question_index:idx,selected_option:answer.selected_option,correct:!!answer.correct,correct_option:answer.correct_option,
+        category:answer.category,points_earned:answer.correct?100+Math.max(0,Math.ceil((seconds*1000-Number(answer.response_ms||0))/1000)):0,
+        speed_bonus:answer.correct?Math.max(0,Math.ceil((seconds*1000-Number(answer.response_ms||0))/1000)):0,
+        timed_out:!answer.selected_option,best_cards:questions[idx]?.best_cards||[]
+      }:null;
+      return out({tournament:{id:t.id,status:t.status,name:t.name},settings,team,is_admin:isAdmin,attempt,questions:publicQuestions,leaderboard:board,participants:participantProgress,last_round_result:lastRoundResult,round:{phase:settings.phase,current_index:idx,submitted_count:submitted,total_participants:attempts.length,seconds_remaining:remaining,leaderboard_seconds_remaining:settings.phase==="leaderboard"&&settings.phase_started_at?Math.max(0,5-Math.floor((Date.now()-new Date(settings.phase_started_at).getTime())/1000)):0}});
     }
     if(b.action==="admin_delete_participant"){
       requireAdmin();
@@ -217,7 +225,10 @@ Deno.serve(async(req:Request)=>{
       const {data:updated,error:upError}=await db.from("quiz_attempts").update({answers,last_submitted_index:index,current_index:index+1,score:Number(attempt.score)+pointsEarned,correct_count:Number(attempt.correct_count)+(correct?1:0),total_time_ms:Number(attempt.total_time_ms)+Math.min(elapsed,seconds*1000)}).eq("id",attempt.id).eq("last_submitted_index",index-1).select().maybeSingle();
       if(upError)return out({error:upError.message},500);
       if(!updated)return out({error:"Your answer is already locked. Please wait."},409);
-      return out({accepted:true,locked:true,points_earned:pointsEarned,attempt:{score:updated.score,correct_count:updated.correct_count,last_submitted_index:updated.last_submitted_index}});
+      const correctQuips=["CERTIFIED JUWARI!","TABLE KA ASLI SIKANDAR!","DEALER BHI SALUTE MAARE!","CHIPS KI BAARISH, BOSS!","AAJ TOH KISMAT ALL-IN HAI!","POKER FACE, PERFECT ACE!","CASINO KO GHAR BEJH DIYA!","YEH HAATH NAHI, MASTERCLASS THI!","FULL HOUSE OF TALENT!","BOSS LEVEL JUWARI!","BAAP RE BAAP, KYA HAND HAI!","SEAT BELT BAANDH, SHARK AAYA!"];
+      const wrongQuips=["DOOB GAYE SAARE PAISE!","YEH HAATH NAHI, HEARTBREAK THA!","DEALER NE AANKHON MEIN DHOOL JHOK DI!","CHIPS GAYE TEL LENE!","BLUFF BHI NAHI CHALA!","POKER FACE THA, PAR ANSWER WRONG!","TABLE NE AAPKO FOLD KAR DIYA!","KISMAT NE BHI DISCONNECT KAR DIYA!","ALL-IN GAYE, ALL-OUT AAYE!","AAJ CARDS AAPKE SAATH NAHI HAIN!","YEH MOVE DEKH KE DEALER BHI RO DIYA!","JEB GARMAI NAHI, KHALI HO GAYI!"];
+      const quips=correct?correctQuips:wrongQuips;
+      return out({accepted:true,locked:true,correct,correct_option:q.correct_option,category:q.category,best_cards:q.best_cards,points_earned:pointsEarned,speed_bonus:speedBonus,quip:quips[Math.floor(Math.random()*quips.length)],attempt:{score:updated.score,correct_count:updated.correct_count,last_submitted_index:updated.last_submitted_index}});
     }
     return out({error:"Unknown quiz action."},400);
   }catch(e){return out({error:e instanceof Error?e.message:"Unexpected server error."},500);}
