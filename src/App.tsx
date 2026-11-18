@@ -105,16 +105,19 @@ function App() {
   useEffect(() => { if (session) load(); }, [session, load]);
   useEffect(() => {
     if (!session) return;
-    const id = window.setInterval(load, 4000);
+    const id = window.setInterval(load, 1000);
     return () => window.clearInterval(id);
   }, [session, load]);
 
   const attempt = quiz?.attempt;
-  const questionIndex = attempt?.current_index ?? 0;
-  const question = attempt?.status === "in_progress" ? quiz?.questions?.[questionIndex] : null;
+  const questionIndex = Number(quiz?.settings?.current_index ?? 0);
+  const roundPhase = quiz?.settings?.phase || "waiting";
+  const question = quizStatusPlaceholder(quiz) === "live" && roundPhase === "question" ? quiz?.questions?.[questionIndex] : null;
   const isAdmin = !!quiz?.is_admin;
   const isRegistered = !!quiz?.team;
   const quizStatus = quiz?.settings?.status || "draft";
+  const answerLocked = !!attempt && Number(attempt.last_submitted_index ?? -1) >= questionIndex;
+  const mySelectedOption = selected || (answerLocked ? (attempt?.answers?.[questionIndex]?.selected_option || "") : "");
 
   const register = async () => {
     setBusy(true); setError(""); setNotice("");
@@ -169,54 +172,47 @@ function App() {
     finally { setBusy(false); }
   };
 
-  const submitAnswer = useCallback(async (option: string | null) => {
-    if (submitLock.current || !attempt || attempt.status !== "in_progress") return;
+  const submitAnswer = useCallback(async (option: string) => {
+    if (submitLock.current || !attempt || answerLocked || roundPhase !== "question") return;
     submitLock.current = true;
-    setSelected(option || "");
+    setSelected(option);
     try {
-      const response = await api("koc-quiz", { action: "answer", question_index: attempt.current_index, selected_option: option });
-      setResult(response);
-      window.setTimeout(async () => {
-        await load();
-        setResult(null);
-        setSelected("");
-        submitLock.current = false;
-      }, 2300);
+      await api("koc-quiz", { action: "answer", question_index: questionIndex, selected_option: option });
+      await load();
     } catch (e) {
       const message = (e as Error).message;
-      if (message.toLowerCase().includes("already received") || message.toLowerCase().includes("out of sequence")) {
+      if (message.toLowerCase().includes("already locked") || message.toLowerCase().includes("closed") || message.toLowerCase().includes("time is up")) {
         await load();
       } else {
         setError(message);
+        setSelected("");
       }
       submitLock.current = false;
     }
-  }, [attempt, api, load]);
-  submitRef.current = submitAnswer;
+  }, [attempt, answerLocked, roundPhase, questionIndex, api, load]);
+  submitRef.current = (option) => { if (option) void submitAnswer(option); };
 
   useEffect(() => {
     submitLock.current = false;
     setSelected("");
-  }, [attempt?.current_index]);
+  }, [questionIndex]);
 
   useEffect(() => {
-    if (!attempt || attempt.status !== "in_progress" || result) return;
+    if (quizStatus !== "live" || roundPhase !== "question" || !quiz?.settings?.question_started_at) return;
     const tick = () => {
-      const elapsed = Math.max(0, (Date.now() - new Date(attempt.question_started_at).getTime()) / 1000);
-      const remaining = Math.max(0, Math.ceil(20 - elapsed));
-      setSecondsLeft(remaining);
-      if (remaining <= 0) submitRef.current?.(null);
+      const started = new Date(quiz.settings.question_started_at).getTime();
+      const duration = Number(quiz.settings.question_seconds || 20);
+      setSecondsLeft(Math.max(0, Math.ceil((started + duration * 1000 - Date.now()) / 1000)));
     };
     tick();
     const id = window.setInterval(tick, 100);
     return () => window.clearInterval(id);
-  }, [attempt?.id, attempt?.current_index, attempt?.question_started_at, attempt?.status, result]);
+  }, [quizStatus, roundPhase, quiz?.settings?.question_started_at, quiz?.settings?.question_seconds]);
 
   const sortedBoard = useMemo(() => quiz?.leaderboard || [], [quiz?.leaderboard]);
-  const completed = attempt?.status === "completed";
+  const completed = quizStatus === "completed" || attempt?.status === "completed";
   const totalScore = attempt?.score || 0;
   const answeredCount = attempt?.answers?.length || 0;
-  const questionProgress = Math.min(20, questionIndex + (result ? 0 : 0));
   const registrationOpen = quiz?.tournament?.status === "registration";
 
   if (!URL || !KEY) return <div className="setup-screen"><h1>KING OF CHIPS 2.0</h1><p>Website configuration is incomplete. Supabase URL and publishable key are required.</p></div>;
@@ -285,7 +281,13 @@ function App() {
             <div className="waiting-box"><b>QUIZ COMPLETED</b><span>Reset the event to clear all registrations and open a fresh registration round.</span></div>}
             <button className="danger-outline wide" disabled={busy} onClick={() => { if (window.confirm("PERMANENT RESET: This will permanently delete ALL participant registrations and quiz attempts. Everyone will have to register again. This cannot be undone. Continue?")) adminAction("admin_reset"); }}><RotateCcw size={16}/> RESET & DELETE ALL PARTICIPANTS</button>
           </div>
-          <div className="admin-note"><Shield size={16}/><span>Each participant gets one attempt. Correct answers earn 100 points plus up to 20 speed-bonus points. Ranking prioritises correct answers, then speed. Deleting a participant permanently removes their registration. Reset permanently deletes every participant and reopens registration.</span></div>
+          {quizStatus === "live" && <div className="round-monitor">
+            <div className="section-kicker">LIVE ROUND MONITOR</div>
+            <div className="round-monitor-top"><b>{roundPhase === "question" ? "QUESTION " + String(questionIndex+1).padStart(2,"0") + " · ANSWER COLLECTION" : roundPhase === "leaderboard" ? "LEADERBOARD · ROUND " + (questionIndex+1) : "QUIZ COMPLETE"}</b><span>{quiz?.round?.submitted_count || 0} / {quiz?.round?.total_participants || 0} SUBMITTED</span></div>
+            <div className="submission-track"><div style={{width: ((quiz?.round?.total_participants ? (quiz.round.submitted_count/quiz.round.total_participants)*100 : 0)) + "%"}}/></div>
+            <div className="round-monitor-foot">{roundPhase === "question" ? (quiz?.round?.seconds_remaining || 0) + " seconds remaining · Answers lock individually" : roundPhase === "leaderboard" ? "Next question in " + (quiz?.round?.leaderboard_seconds_remaining || 0) + " seconds" : "All rounds complete"}</div>
+          </div>}
+          <div className="admin-note"><Shield size={16}/><span>Every question is shared and timed for all participants. Answers lock on submission. After everyone submits or time expires, the leaderboard is shown for 5 seconds before the next question begins.</span></div>
           <div className="admin-section-head"><h3>REGISTERED PLAYERS</h3><span>{quiz?.participants?.length || 0} entries</span></div>
           <div className="participant-list">
             {(quiz?.participants || []).filter((p:any) => !["left","disqualified"].includes(p.status)).map((p:any) => <div className="participant-row" key={p.id}><div className="avatar-chip">{(p.team_name || "?").slice(0,1).toUpperCase()}</div><div><b>{p.team_name}</b><small>{p.captain_name}</small></div><span className="player-state">{p.status?.toUpperCase()}</span><button className="delete-participant" disabled={busy || quizStatus !== "draft"} title={quizStatus !== "draft" ? "Individual deletion is available while registration is open" : "Permanently delete " + p.team_name} onClick={() => deleteParticipant(p)}>DELETE</button></div>)}
@@ -298,7 +300,7 @@ function App() {
         <div className="quiz-column">
           {!attempt ? <div className="glass-card waiting-card">
             <div className="waiting-emblem"><Spade size={34}/></div><div className="section-kicker">YOU'RE IN THE GAME</div><h2>WELCOME, {quiz?.team?.team_name?.toUpperCase()}.</h2>
-            {quizStatus === "live" ? <><p>The quiz is live. Your 20-second-per-question clock starts when you enter.</p><button className="gold-button wide" disabled={busy} onClick={startQuiz}>ENTER THE QUIZ <ArrowRight size={16}/></button></> :
+            {quizStatus === "live" ? <><p>The quiz is live. Your question will appear automatically with everyone else's.</p><div className="waiting-box"><div className="pulse-dot"/><b>JOINING THE LIVE ROUND</b><span>Keep this page open. The current question is synchronised for all players.</span></div></> :
               quizStatus === "completed" ? <p>The quiz has ended. Check the leaderboard for final standings.</p> :
               <><p>You're registered. The organiser will start the quiz shortly.</p><div className="waiting-box"><div className="pulse-dot"/><b>WAITING FOR THE ORGANISER</b><span>Keep this page open. It will update automatically when the quiz starts.</span></div></>}
           </div> : completed ? <div className="glass-card finish-card">
@@ -306,26 +308,31 @@ function App() {
             <div className="final-score"><b>{totalScore}</b><span>/ 2,400 POINTS</span></div>
             <div className="finish-stats"><div><b>{attempt.correct_count}/20</b><small>CORRECT ANSWERS</small></div><div><b>{(attempt.total_time_ms/1000).toFixed(1)}s</b><small>TIME USED</small></div></div>
             <p>Your score is on the live leaderboard. Good game!</p>
+          </div> : quizStatus === "live" && roundPhase === "leaderboard" ? <div className="glass-card round-leaderboard">
+            <div className="finish-trophy"><Trophy size={40}/></div><div className="section-kicker">ROUND {questionIndex+1} COMPLETE</div><h2>THE TABLE HAS SPOKEN.</h2>
+            <p>All answers are locked. Here's the leaderboard after this hand.</p>
+            <Leaderboard rows={sortedBoard}/>
+            <div className="next-round-countdown"><Clock3 size={15}/> NEXT QUESTION IN {quiz?.round?.leaderboard_seconds_remaining ?? 0}s</div>
           </div> : question ? <div className="glass-card question-card">
             <div className="question-topline"><div><div className="section-kicker">HAND {String(questionIndex+1).padStart(2,"0")} <span>/ 20</span></div><h2>FIND YOUR BEST HAND.</h2></div><div className={"countdown " + (secondsLeft <= 5 ? "urgent" : "")}><Clock3 size={16}/><b>{secondsLeft}</b><small>SEC</small></div></div>
             <div className="progress-track"><div className="progress-fill" style={{width: ((questionIndex)/20*100) + "%"}}/></div>
             <div className="private-area"><div className="card-label">YOUR PRIVATE CARDS <span>HOLE CARDS</span></div><div className="card-row private-cards">{question.hole_cards.map((c,i)=><PlayingCard key={i} card={c} size="large" delay={i*100}/>)}</div></div>
             <div className="question-instruction">Which five-card community combination gives you the strongest possible hand?</div>
             <div className="options-grid">
-              {question.options.map((o) => <button key={o.label} className={"option-card " + (selected===o.label ? "chosen" : "")} disabled={!!result || busy} onClick={() => submitAnswer(o.label)}>
-                <span className="option-letter">{o.label}</span><span className="option-cards">{o.cards.map((c,i)=><PlayingCard key={i} card={c} size="tiny" delay={i*45}/>)}</span><span className="option-select">{selected===o.label ? "SELECTED" : "CHOOSE"}</span>
+              {question.options.map((o) => <button key={o.label} className={"option-card " + (mySelectedOption===o.label ? "chosen" : "")} disabled={answerLocked || !!selected || busy || secondsLeft<=0} onClick={() => submitAnswer(o.label)}>
+                <span className="option-letter">{o.label}</span><span className="option-cards">{o.cards.map((c,i)=><PlayingCard key={i} card={c} size="tiny" delay={i*45}/>)}</span><span className="option-select">{mySelectedOption===o.label ? "LOCKED" : answerLocked ? "ANSWER LOCKED" : "CHOOSE"}</span>
               </button>)}
             </div>
-            <div className="question-footer"><span><Timer size={14}/> 20 SECONDS PER QUESTION</span><span>{questionIndex+1} OF 20</span></div>
+            <div className="question-footer"><span><Timer size={14}/> {answerLocked ? "ANSWER LOCKED · WAITING FOR OTHERS" : secondsLeft<=0 ? "TIME UP · CLOSING ROUND" : "20 SECONDS PER QUESTION"}</span><span>{questionIndex+1} OF 20</span></div>
           </div> : <div className="glass-card loading-card"><div className="loading-spinner"/><h2>DEALING THE NEXT HAND</h2></div>}
         </div>
         <aside className="side-column">
-          <div className="glass-card player-info"><div className="section-kicker">PLAYER CARD</div><div className="player-name"><div className="avatar-chip big">{quiz?.team?.team_name?.slice(0,1).toUpperCase()}</div><div><b>{quiz?.team?.team_name}</b><small>{quiz?.team?.captain_name}</small></div></div><div className="player-score"><small>YOUR SCORE</small><b>{totalScore}<span> / 200</span></b></div><div className="mini-progress"><div style={{width:(totalScore/200*100)+"%"}}/></div><div className="score-meta"><span>{attempt?.correct_count || 0} correct</span><span>{answeredCount}/20 answered</span></div></div>
+          <div className="glass-card player-info"><div className="section-kicker">PLAYER CARD</div><div className="player-name"><div className="avatar-chip big">{quiz?.team?.team_name?.slice(0,1).toUpperCase()}</div><div><b>{quiz?.team?.team_name}</b><small>{quiz?.team?.captain_name}</small></div></div><div className="player-score"><small>YOUR SCORE</small><b>{totalScore}<span> / 2,400</span></b></div><div className="mini-progress"><div style={{width:(totalScore/2400*100)+"%"}}/></div><div className="score-meta"><span>{attempt?.correct_count || 0} correct</span><span>{answeredCount}/20 answered</span></div></div>
           <Leaderboard rows={sortedBoard} compact/>
         </aside>
       </section>}
 
-      {result && <div className={"result-overlay " + (result.correct ? "is-correct" : "is-wrong")}>
+      {false && result && <div className={"result-overlay " + (result.correct ? "is-correct" : "is-wrong")}>
         <div className="result-sparks">{Array.from({length:18},(_,i)=><i key={i} style={{"--i":i} as React.CSSProperties}/>)}</div>
         <div className="result-content">
           {result.correct ? <><div className="result-icon"><Crown size={42}/></div><div className="result-kicker">THE CROWD GOES WILD</div><div className="points-pop">+{result.points_earned} POINTS {result.speed_bonus > 0 ? "(+" + result.speed_bonus + " SPEED)" : ""}</div><h2 className="quip-title">{result.quip || "CERTIFIED JUWARI!"}</h2><p>{result.category} · Correct answer {result.correct_option}</p><div className="reveal-cards">{(result.best_cards||[]).map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*90}/>)}</div><div className="chip-shower"><span>♠</span><span>♦</span><span>♣</span><span>♥</span><span>♠</span><span>♦</span><span>♣</span></div></> :
