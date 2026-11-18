@@ -231,6 +231,8 @@ function App() {
   const totalScore = attempt?.score || 0;
   const answeredCount = attempt?.answers?.length || 0;
   const registrationOpen = quiz?.tournament?.status === "registration";
+  const projectorMode = new URLSearchParams(window.location.search).get("projector") === "1";
+  const projectorQuestion = quizStatus === "live" && roundPhase === "question" ? quiz?.questions?.[questionIndex] : null;
   const registrationUrl = window.location.origin;
   const registrationQrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=12&data=" + encodeURIComponent(registrationUrl);
 
@@ -263,7 +265,7 @@ function App() {
       {notice && <div className="notice success"><CheckCircle2 size={17}/><span>{notice}</span><button onClick={() => setNotice("")}>×</button></div>}
 
       {!session || loading ? <section className="glass-card loading-card"><div className="loading-spinner"/><h2>SHUFFLING THE DECK</h2><p>Preparing your table…</p></section> :
-      !isRegistered && !isAdmin ? <section className="entry-grid">
+      projectorMode ? <ProjectorView quiz={quiz} quizStatus={quizStatus} roundPhase={roundPhase} questionIndex={questionIndex} question={projectorQuestion} secondsLeft={secondsLeft} leaderboard={sortedBoard}/> : !isRegistered && !isAdmin ? <section className="entry-grid">
         <div className="glass-card entry-card">
           <div className="section-kicker">PLAYER REGISTRATION</div><h2>TAKE YOUR SEAT.</h2>
           <p>Enter your team and captain details to join King of Chips 2.0.</p>
@@ -295,6 +297,7 @@ function App() {
             <div><small>TIME / Q</small><b>20s</b></div>
           </div>
           <div className="admin-controls">
+            <a className="outline-button wide projector-open-link" href={window.location.origin + "/?projector=1"} target="_blank" rel="noreferrer">OPEN PROJECTOR MODE <ArrowRight size={16}/></a>
             {quizStatus === "draft" ? <button className="gold-button wide" disabled={busy || !(quiz?.participants?.length)} onClick={() => { if (window.confirm("Start the 20-question quiz now? Registration will close and the 20-second timer will apply to every question.")) adminAction("admin_start"); }}><Spade size={17}/> START QUIZ FOR EVERYONE</button> :
             quizStatus === "live" ? <button className="outline-button wide" disabled={busy} onClick={() => { if (window.confirm("End the quiz now? Participants will no longer be able to submit answers.")) adminAction("admin_finish"); }}>END QUIZ</button> :
             <div className="waiting-box"><b>QUIZ COMPLETED</b><span>Reset the event to clear all registrations and open a fresh registration round.</span></div>}
@@ -373,7 +376,7 @@ function App() {
         </aside>
       </section>}
 
-      {result && !isAdmin && <div className={"result-overlay " + (result.correct ? "is-correct" : "is-wrong")}>
+      {result && !isAdmin && !projectorMode && roundPhase === "question" && <div className={"result-overlay " + (result.correct ? "is-correct" : "is-wrong")}>
         <div className="result-sparks">{Array.from({length:18},(_,i)=><i key={i} style={{"--i":i} as React.CSSProperties}/>)}</div>
         <div className="result-content">
           {result.correct ? <><div className="result-icon"><Crown size={42}/></div><div className="result-kicker">THE CROWD GOES WILD</div><div className="points-pop">+{result.points_earned} POINTS {result.speed_bonus > 0 ? "(+" + result.speed_bonus + " SPEED)" : ""}</div><h2 className="quip-title">{result.quip || "CERTIFIED JUWARI!"}</h2><p>{result.category} · Your answer {result.selected_option || "NOT ANSWERED"} · Correct answer {result.correct_option}</p><div className="result-waiting">ANSWER LOCKED · WAITING FOR THE TABLE</div><div className="reveal-cards">{(result.best_cards||[]).map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*90}/>)}</div><div className="chip-shower"><span>♠</span><span>♦</span><span>♣</span><span>♥</span><span>♠</span><span>♦</span><span>♣</span></div></> :
@@ -383,6 +386,21 @@ function App() {
       <footer className="site-footer"><span><b>♠ KING OF CHIPS 2.0</b> · FINCEPTION</span><span>PLAY SMART. PLAY FAIR. VIRTUAL CHIPS ONLY.</span></footer>
     </main>
   </div>;
+}
+
+function ProjectorView({ quiz, quizStatus, roundPhase, questionIndex, question, secondsLeft, leaderboard }: { quiz: QuizData | null; quizStatus: string; roundPhase: string; questionIndex: number; question: Question | null | undefined; secondsLeft: number; leaderboard: any[] }) {
+  return <section className="projector-screen">
+    <div className="projector-top"><div className="brand-lockup"><div className="brand-icon"><Spade size={25}/></div><div><b>KING OF <i>CHIPS</i></b><small>FINCEPTION · THE FINANCE CLUB</small></div></div><div className="projector-live"><span/> {quizStatus === "live" ? (roundPhase === "question" ? "LIVE QUESTION" : "LEADERBOARD") : quizStatus.toUpperCase()}</div></div>
+    {quizStatus !== "live" ? <div className="projector-hold"><div className="section-kicker">KING OF CHIPS 2.0</div><h1>{quizStatus === "completed" ? "THE TABLE HAS SPOKEN." : "GET READY TO PLAY."}</h1><p>{quizStatus === "completed" ? "Final standings are ready." : "The next hand will appear here when the organiser starts the quiz."}</p>{quizStatus === "completed" && <Leaderboard rows={leaderboard}/>}</div> :
+      roundPhase === "leaderboard" ? <div className="projector-board"><div className="section-kicker">ROUND {questionIndex+1} COMPLETE</div><h1><Trophy size={35}/> LIVE LEADERBOARD</h1><p>All answers are locked · Next hand in {quiz?.round?.leaderboard_seconds_remaining ?? 0}s</p><Leaderboard rows={leaderboard}/></div> : question ? <div className="projector-question">
+        <div className="projector-question-head"><div><div className="section-kicker">HAND {String(questionIndex+1).padStart(2,"0")} / 20</div><h1>FIND YOUR BEST HAND.</h1></div><div className={"countdown projector-countdown " + (secondsLeft <= 5 ? "urgent" : "")}><Clock3 size={22}/><b>{secondsLeft}</b><small>SEC</small></div></div>
+        <div className="projector-progress"><div style={{width: (questionIndex/20*100)+"%"}}/></div>
+        <div className="projector-private"><div className="card-label">PRIVATE CARDS <span>HOLE CARDS</span></div><div className="card-row private-cards">{question.hole_cards.map((c,i)=><PlayingCard key={i} card={c} size="large" delay={i*100}/>)}</div></div>
+        <div className="projector-instruction">Which five-card community combination gives you the strongest possible hand?</div>
+        <div className="projector-options">{question.options.map(o=><div className="projector-option" key={o.label}><b>{o.label}</b><div>{o.cards.map((c,i)=><PlayingCard key={i} card={c} size="normal" delay={i*35}/>)}</div></div>)}</div>
+        <div className="projector-bottom"><span>{quiz?.round?.submitted_count || 0} / {quiz?.round?.total_participants || 0} PLAYERS SUBMITTED</span><span>QUESTION CLOSES IN {secondsLeft}s</span></div>
+      </div> : <div className="projector-hold"><h1>DEALING THE NEXT HAND</h1></div>}
+  </section>;
 }
 
 function Leaderboard({ rows, compact = false }: { rows: any[]; compact?: boolean }) {
