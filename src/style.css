@@ -44,3 +44,14 @@
  .game-focus .poker-table{min-height:330px;height:54dvh}
  .game-focus .table-head h2{font-size:12px}
 }
+
+.mode-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
+.mode-actions button{font-size:9px;line-height:1.4;padding:12px 8px}
+.settings-form{border-top:1px solid #294237;border-bottom:1px solid #294237;padding:16px 0;margin:14px 0;display:grid;gap:10px}
+.settings-form>small{color:#c9a85a;font-size:10px;letter-spacing:1.5px;font-weight:800}
+.settings-form label{display:grid;gap:6px;color:#b7c7be;font-size:10px;letter-spacing:.7px}
+.settings-form input{width:100%;min-width:0;background:#0b1711;border:1px solid #355446;border-radius:8px;padding:10px;color:#f5f1e8;font:inherit;font-size:13px}
+.settings-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.danger{background:#7e3029!important;color:#fff!important;border:1px solid #a94b40!important;border-radius:9px;padding:13px;font-weight:800;letter-spacing:1px}
+.danger:hover{background:#963d34!important}
+@media(max-width:560px){.mode-actions{grid-template-columns:1fr}.settings-two{grid-template-columns:1fr 1fr}.admin-grid{grid-template-columns:minmax(0,1fr)}}
