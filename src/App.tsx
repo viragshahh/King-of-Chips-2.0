@@ -307,14 +307,15 @@ function App() {
           {quizStatus === "live" && quiz?.admin_questions?.[questionIndex] && <div className="glass-card admin-live-question">
             <div className="section-kicker">LIVE QUESTION PREVIEW · ROUND {questionIndex+1}/20</div>
             <div className="admin-question-top"><h3>{roundPhase === "leaderboard" ? "ROUND ANSWER REVEAL" : "CURRENT QUESTION"}</h3><span>{quiz?.round?.seconds_remaining || 0}s LEFT</span></div>
+            <p className="admin-question-prompt">Which five-card community combination gives you the strongest possible hand?</p>
             <div className="admin-hole-cards">{quiz.admin_questions[questionIndex].hole_cards.map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="normal" delay={i*70}/>)}</div>
             <div className="admin-options-grid">{quiz.admin_questions[questionIndex].options.map((o:OptionData)=><div key={o.label} className={"admin-option " + (roundPhase === "leaderboard" && o.label === (quiz?.admin_questions?.[questionIndex]?.correct_option || "") ? "admin-option-correct" : "")}><b>{o.label}</b><div>{o.cards.map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*30}/>)}</div>{roundPhase === "leaderboard" && o.label === quiz?.admin_questions?.[questionIndex]?.correct_option && <small>✓ CORRECT ANSWER</small>}</div>)}</div>
             {roundPhase === "leaderboard" && <div className="admin-answer-key">Correct answer: <b>{quiz?.admin_questions?.[questionIndex]?.correct_option || "—"}</b> · {quiz?.admin_questions?.[questionIndex]?.category || ""}</div>}
           </div>}
-          <div className="admin-submission-list">
+          {quizStatus === "live" && <div className="admin-submission-list">
             <div className="admin-section-head"><h3>ROUND SUBMISSIONS</h3><span>{quiz?.round?.submitted_count || 0} / {quiz?.round?.total_participants || 0} LOCKED</span></div>
             <div className="submission-people">{(quiz?.participants || []).map((p:any)=><div className="submission-person" key={p.id}><span className={"submission-dot " + (p.has_submitted ? "done" : "pending")}/><b>{p.team_name}</b><small>{p.has_submitted ? "SUBMITTED" : "WAITING"}</small></div>)}</div>
-          </div>
+          </div>}
           <div className="admin-note"><Shield size={16}/><span>Keep this Control Room tab open throughout the event. It coordinates the shared timer, closes rounds, records timeouts and advances everyone together. Submitted answers lock immediately; the leaderboard appears when everyone submits or time expires.</span></div>
           <div className="admin-section-head"><h3>REGISTERED PLAYERS</h3><span>{quiz?.participants?.length || 0} entries</span></div>
           <div className="participant-list">
