@@ -152,7 +152,8 @@ Deno.serve(async(req:Request)=>{
       }
       const seconds=Number(settings.question_seconds||20);
       const remaining=settings.phase==="question"&&settings.question_started_at?Math.max(0,Math.ceil((new Date(settings.question_started_at).getTime()+seconds*1000-Date.now())/1000)):0;
-      const board=await leaderboard();
+      const showBoard=isAdmin||settings.phase==="leaderboard"||settings.status==="completed";
+      const board=showBoard?await leaderboard():[];
       const participants=isAdmin?(await db.from("teams").select("id,team_name,captain_name,status,created_at").eq("tournament_id",t.id).order("created_at")).data||[]:[];
       const participantProgress=isAdmin?participants.map((p:any)=>{const a=attempts.find((x:any)=>x.team_id===p.id);return {...p,has_submitted:!!a&&Number(a.last_submitted_index)>=idx,attempt_status:a?.status||"not_started"};}):[];
       const answer=attempt?.answers?.[idx]||null;
