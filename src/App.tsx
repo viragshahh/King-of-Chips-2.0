@@ -1,42 +1,344 @@
-import React,{useCallback,useEffect,useMemo,useRef,useState} from "react";
-import {createRoot} from "react-dom/client";
-import {createClient} from "@supabase/supabase-js";
-import type {Session} from "@supabase/supabase-js";
-import {Shield,Spade,Trophy,Users,RefreshCw,CheckCircle,ArrowRight,Wallet,AlertCircle} from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { createClient } from "@supabase/supabase-js";
+import type { Session } from "@supabase/supabase-js";
+import { Spade, Trophy, Shield, Users, Clock3, Crown, Sparkles, RotateCcw, CheckCircle2, AlertTriangle, ArrowRight, Zap, Timer, Medal } from "lucide-react";
 import "./style.css";
-const URL=import.meta.env.VITE_SUPABASE_URL as string|undefined;
-const KEY=import.meta.env.VITE_SUPABASE_ANON_KEY as string|undefined;
-const supabase=URL&&KEY?createClient(URL,KEY):null;
-type State={tournament:any;profile:any;teams:any[];rooms:any[];my_team:any;hand:any;players:any[]};
-function App(){
- const [session,setSession]=useState<Session|null>(null),[profile,setProfile]=useState<any>(null),[state,setState]=useState<State|null>(null),[password,setPassword]=useState(""),[adminMode,setAdminMode]=useState(false),[team,setTeam]=useState(""),[captain,setCaptain]=useState(""),[roomId,setRoomId]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState(""),[seconds,setSeconds]=useState(8),[gameFocus,setGameFocus]=useState(false),[settings,setSettings]=useState({starting_stack:1000,small_blind:10,big_blind:20,hands_per_room:3,action_time_seconds:8,game_duration_minutes:15});
- const lastTimeout=useRef("");
- const isAdmin=profile?.role==="admin";
- const api=useCallback(async(fn:string,body:any)=>{if(!supabase)throw new Error("Supabase settings are missing.");const {data}=await supabase.auth.getSession();if(!data.session)throw new Error("Connecting guest session. Please retry.");const response=await fetch(URL+"/functions/v1/"+fn,{method:"POST",headers:{"Content-Type":"application/json","apikey":KEY!,"Authorization":"Bearer "+data.session.access_token},body:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw new Error(result.error||"Request failed");return result;},[]);
- const refresh=useCallback(async(rid?:string)=>{if(!session||!supabase)return;try{let x=await api("koc-api",{action:"state",room_id:rid||roomId||undefined});if(x.tournament?.status==="ready"||x.tournament?.status==="live"){await api("koc-game",{action:"sync_ready_rooms"});x=await api("koc-api",{action:"state",room_id:rid||roomId||undefined});}setState(x);if(x.profile)setProfile(x.profile);if(!roomId&&x.rooms?.length&&isAdmin)setRoomId(x.rooms[0].id);}catch(e){setError((e as Error).message);}},[session,api,roomId,isAdmin]);
- useEffect(()=>{if(!supabase)return;let alive=true;supabase.auth.getSession().then(async({data})=>{let s=data.session;if(!s){const {data:guest,error:e}=await supabase.auth.signInAnonymously();if(e) {if(alive)setError(e.code==="anonymous_provider_disabled"?"Anonymous sign-ins are still disabled in this Supabase project. Open Supabase → Authentication → Sign In / Providers → Anonymous Sign-Ins, switch it ON, and save. Then reload this page.":"Could not start guest session: "+e.message);return;}s=guest.session;}if(alive)setSession(s);});const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>{setSession(s);setState(null);setProfile(null);});return()=>{alive=false;subscription.unsubscribe();};},[]);
- useEffect(()=>{if(!session||!supabase)return;supabase.from("profiles").select("*").eq("user_id",session.user.id).single().then(({data})=>setProfile(data));},[session]);
- useEffect(()=>{if(session)refresh();else setState(null);},[session,refresh]);
- useEffect(()=>{if(!session||!supabase)return;const channel=supabase.channel("koc-live").on("postgres_changes",{event:"*",schema:"public",table:"teams"},()=>refresh()).on("postgres_changes",{event:"*",schema:"public",table:"rooms"},()=>refresh()).on("postgres_changes",{event:"*",schema:"public",table:"hands"},()=>refresh()).on("postgres_changes",{event:"*",schema:"public",table:"hand_players"},()=>refresh()).on("postgres_changes",{event:"*",schema:"public",table:"hand_actions"},()=>refresh()).subscribe();const poll=window.setInterval(()=>refresh(),5000);return()=>{window.clearInterval(poll);supabase.removeChannel(channel);};},[session,refresh]);
- const run=async(fn:string,body:any,success?:string)=>{setBusy(true);setError("");setNotice("");try{await api(fn,body);if(success)setNotice(success);await refresh();}catch(e){setError((e as Error).message);}finally{setBusy(false);}};
- const logout=async()=>{if(!supabase)return;setBusy(true);setError("");setNotice("");try{if(myTeam)await api("koc-api",{action:"leave"});await supabase.auth.signOut();const {data,error:e}=await supabase.auth.signInAnonymously();if(e)throw e;setSession(data.session);setTeam("");setCaptain("");setState(null);setProfile(null);setNotice("Logged out. You can join again with a fresh guest session.");}catch(e){setError("Could not log out: "+(e as Error).message);}finally{setBusy(false);}};
- const auth=async()=>{if(!supabase)return;setBusy(true);setError("");try{await api("koc-api",{action:"admin_login",password});setPassword("");setProfile({role:"admin"});setAdminMode(false);setNotice("Admin access granted.");await refresh();}catch(e){setError((e as Error).message);}finally{setBusy(false);}};
- const myTeam=state?.my_team;const hand=state?.hand;const roomTeams=(state?.teams||[]).filter((x:any)=>x.room_id===myTeam?.room_id&&!["left","disqualified"].includes(x.status));const readyCount=roomTeams.filter((x:any)=>x.is_ready).length;const roomTotal=roomTeams.length;const myPlayer=state?.players?.find(p=>p.team_id===myTeam?.id);const myTurn=!!(myPlayer&&hand&&myPlayer.seat_number===hand.turn_seat&&hand.status!=="settled");
- useEffect(()=>{if(hand&&hand.status!=="settled")setGameFocus(true);},[hand?.id,hand?.status]);
- useEffect(()=>{const t=state?.tournament;if(t)setSettings({starting_stack:t.starting_stack,small_blind:t.small_blind,big_blind:t.big_blind,hands_per_room:t.hands_per_room,action_time_seconds:t.action_time_seconds||8,game_duration_minutes:t.game_duration_minutes||15});},[state?.tournament?.id,state?.tournament?.updated_at,state?.tournament?.action_time_seconds]);
- useEffect(()=>{if(!myTurn||!hand?.action_deadline)return;const update=()=>{const left=Math.max(0,Math.ceil((new Date(hand.action_deadline).getTime()-Date.now())/1000));setSeconds(left);if(left===0&&lastTimeout.current!==hand.id+":"+hand.action_deadline){lastTimeout.current=hand.id+":"+hand.action_deadline;run("koc-game",{action:"act",hand_id:hand.id,kind:myPlayer.street_bet<hand.current_bet?"fold":"check"},"Timer action submitted.");}};update();const id=window.setInterval(update,400);return()=>window.clearInterval(id);},[myTurn,hand?.id,hand?.action_deadline,myPlayer?.street_bet,hand?.current_bet]);
- const sorted=useMemo(()=>[...(state?.teams||[])].filter((x:any)=>x.status!=="disqualified").sort((a,b)=>b.chip_stack-a.chip_stack||b.highest_pot_won-a.highest_pot_won),[state?.teams]);
- const rankOf=(x:any)=>1+sorted.filter(y=>y.chip_stack>x.chip_stack||(y.chip_stack===x.chip_stack&&y.highest_pot_won>x.highest_pot_won)).length;
- const tieAtCutoff=(x:any)=>{const r=rankOf(x),group=sorted.filter(y=>y.chip_stack===x.chip_stack&&y.highest_pot_won===x.highest_pot_won);return group.length>1&&r<=18&&r+group.length-1>=18;};
- if(!URL||!KEY)return <div className="setup"><h1>King of Chips 2.0</h1><p>Deployment configuration is incomplete. Add the Supabase project URL and publishable/anon key to Vercel.</p></div>;
- return <div className="app"><header className="topbar"><div className="brand"><span className="brandmark"><Spade/></span><span><b>KING OF <i>CHIPS</i></b><small>FINCEPTION · THE FINANCE CLUB</small></span></div><div className="top-actions">{session?<><span className="livepill">{isAdmin?"ADMIN":"PARTICIPANT"}</span>{!isAdmin&&myTeam&&<button className="outline" disabled={busy} onClick={logout}>LOG OUT</button>}</>:<span className="livepill">CONNECTING</span>}</div></header>
- <main><section className="intro"><div><div className="eyebrow">♠ FINCEPTION PRESENTS</div><h1>PLAY YOUR HAND.<br/><em>CLAIM THE CROWN.</em></h1><p>Official tournament portal · No-Limit Texas Hold’em · Virtual chips only</p></div><div className="introstat"><div><small>STARTING STACK</small><b>{state?.tournament?.starting_stack?.toLocaleString("en-IN")||"1,000"}</b></div><div><small>BLINDS</small><b>{state?.tournament?.small_blind||10} / {state?.tournament?.big_blind||20}</b></div><div><small>QUALIFIERS</small><b>18</b></div></div></section>
- {error&&<div className="alert error"><AlertCircle size={17}/>{error}<button onClick={()=>setError("")}>×</button></div>}{notice&&<div className="alert good"><CheckCircle size={17}/>{notice}<button onClick={()=>setNotice("")}>×</button></div>}
- {!session?<section className="auth-card"><h2>CONNECTING TO THE TABLE…</h2><p className="muted">Preparing your guest session. No account or email required.</p></section>:!isAdmin&&!myTeam?<section className="auth-card"><div className="panel-title"><div><small>PARTICIPANT ACCESS · NO SIGN-IN</small><h2>JOIN THE TOURNAMENT</h2></div><Users/></div><label>TEAM NAME<input value={team} onChange={e=>setTeam(e.target.value)} placeholder="Enter your team name"/></label><label>PARTICIPANT / CAPTAIN NAME<input value={captain} onChange={e=>setCaptain(e.target.value)} placeholder="Enter your name"/></label><button className="gold full" disabled={busy||!team.trim()||!captain.trim()} onClick={()=>run("koc-api",{action:"register",team_name:team,captain_name:captain},"You have joined the tournament.")}>JOIN NOW <ArrowRight size={15}/></button><p className="muted">Scan the event QR code, enter your team name and participant name, and join. No account or email needed.</p>{!adminMode?<button className="textbutton" onClick={()=>setAdminMode(true)}>Organiser / Admin access</button>:<><label>ADMIN PASSWORD<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter admin password"/></label><button className="gold full" disabled={busy||!password} onClick={auth}>ADMIN LOGIN</button><button className="textbutton" onClick={()=>{setAdminMode(false);setPassword("");}}>Cancel</button></>}</section>:<><div className="rolebar"><b>{isAdmin?<><Shield size={16}/> ADMIN CONTROL CENTRE</>:<><Users size={16}/> PARTICIPANT CONSOLE</>}</b><span>{state?.tournament?.status?.toUpperCase()||"LOADING"} · Live updates enabled</span></div>
- {isAdmin?<section className="admin-grid"><div className="panel"><small>TOURNAMENT OPERATIONS</small><h2>ADMIN CONTROL</h2><div className="setting"><span>Total occupied seats</span><b>{(state?.teams||[]).filter((x:any)=>!!x.room_id&&x.status!=="disqualified").length}</b></div><div className="setting"><span>Rooms</span><b>{state?.rooms?.length||0}</b></div><div className="setting"><span>Qualifying teams</span><b>18</b></div><div className="setting"><span>Maximum teams per room</span><b>6</b></div><div className="setting"><span>Registered participants</span><b>{(state?.teams||[]).filter((x:any)=>x.status!=="disqualified").length}</b></div><div className="setting"><span>Registration limit</span><b>UNLIMITED</b></div><div className="settings-form"><small>GAME SETTINGS</small><label>Starting stack<input type="number" min="100" value={settings.starting_stack} onChange={e=>setSettings(s=>({...s,starting_stack:Number(e.target.value)}))}/></label><div className="settings-two"><label>Small blind<input type="number" min="1" value={settings.small_blind} onChange={e=>setSettings(s=>({...s,small_blind:Number(e.target.value)}))}/></label><label>Big blind<input type="number" min="1" value={settings.big_blind} onChange={e=>setSettings(s=>({...s,big_blind:Number(e.target.value)}))}/></label></div><div className="settings-two"><label>Hands per room<input type="number" min="1" max="20" value={settings.hands_per_room} onChange={e=>setSettings(s=>({...s,hands_per_room:Number(e.target.value)}))}/></label><label>Turn time limit (sec)<input type="number" min="5" max="60" value={settings.action_time_seconds} onChange={e=>setSettings(s=>({...s,action_time_seconds:Number(e.target.value)}))}/></label></div><label>Planned session duration (minutes)<input type="number" min="5" max="180" value={settings.game_duration_minutes} onChange={e=>setSettings(s=>({...s,game_duration_minutes:Number(e.target.value)}))}/></label><button className="gold full" disabled={busy} onClick={()=>run("koc-api",{action:"configure",...settings},"Game settings saved.")}>SAVE GAME SETTINGS</button><p className="muted">Turn timer is enforced automatically. The session limit starts with the first hand; when it expires, no new hands start, but active hands are allowed to finish.</p></div><button className="danger full" disabled={busy} onClick={()=>{if(window.confirm("RESET TOURNAMENT? All rooms, hands, action history and scores will be cleared. Real registrations will be retained and chips reset to the starting stack."))run("koc-api",{action:"reset"},"Tournament reset. Real registrations retained.");}}>RESET TOURNAMENT</button><p className="muted">Rooms are created automatically from the registered team count, with no room exceeding 6 teams.</p><button className="gold full" disabled={busy||!state?.teams?.length} onClick={()=>run("koc-api",{action:"allocate",capacity:6},"Balanced rooms allocated.")}>AUTO-ALLOCATE ROOMS · MAX 6</button><button className="outline full" disabled={busy} onClick={()=>run("koc-api",{action:"set_status",status:"registration"},"Registration opened.")}>OPEN REGISTRATION</button><button className="outline full" disabled={busy} onClick={()=>run("koc-api",{action:"set_status",status:"ready"},"Registration closed.")}>CLOSE REGISTRATION</button><button className="outline full" onClick={()=>refresh(roomId)}><RefreshCw size={14}/> REFRESH DATA</button><div className="settings-form"><small>PARTICIPANT MANAGEMENT</small><p className="muted">Remove a participant from the tournament. Their active hand is folded if necessary, and their seat is released.</p>{(state?.teams||[]).filter((x:any)=>x.status!=="disqualified").map((x:any)=><div className="setting" key={x.id}><span><b>{x.team_name}</b><small>{x.captain_name} · {x.status}{x.room_id?" · Room "+(state?.rooms?.find((r:any)=>r.id===x.room_id)?.room_number||"—"):" · Not seated"}</small></span><button className="danger" disabled={busy||x.status==="disqualified"} onClick={()=>{if(window.confirm("Remove "+x.team_name+" from the tournament? Their current hand will be folded if active."))run("koc-api",{action:"remove_team",team_id:x.id},"Participant removed from the tournament.");}}>REMOVE</button></div>)}</div></div><div className="panel"><small>ROOM MONITOR</small><h2>SELECT A ROOM</h2><select value={roomId} onChange={e=>{setRoomId(e.target.value);refresh(e.target.value);}}><option value="">Choose room</option>{state?.rooms?.map(r=><option key={r.id} value={r.id}>Room {r.room_number} · Hand {r.hand_number}/{state?.tournament?.hands_per_room||3}</option>)}</select>{roomId&&<div className="setting"><span>Teams ready</span><b>{(state?.teams||[]).filter(x=>x.room_id===roomId&&x.is_ready).length} / {(state?.teams||[]).filter(x=>x.room_id===roomId&&x.chip_stack>0&&x.status!=="disqualified").length}</b></div>}<p className="muted">Hands start automatically when all active teams in the selected room are ready. No admin start action required.</p><div className="setting"><span>Current hand</span><b>{hand?.hand_number||0} / {state?.tournament?.hands_per_room||3}</b></div><div className="setting"><span>Stage</span><b>{hand?.status?.toUpperCase()||"WAITING"}</b></div><div className="setting"><span>Pot</span><b>{hand?.pot_total||0}</b></div><div className="setting"><span>Last action</span><b>{hand?.last_action||"—"}</b></div></div></section>:<section className="panel participant-summary"><small>YOUR TEAM</small><h2>{myTeam.team_name}</h2><div className="setting"><span>Captain</span><b>{myTeam.captain_name}</b></div><div className="setting"><span>Team ID</span><b>{myTeam.id.slice(0,8).toUpperCase()}</b></div><div className="setting"><span>Room</span><b>{myTeam.room_id?(state?.rooms?.find(r=>r.id===myTeam.room_id)?.room_number||"Assigned"):"Awaiting allocation"}</b></div><div className="setting"><span>Chip stack</span><b>{myTeam.chip_stack?.toLocaleString("en-IN")}</b></div><div className="setting"><span>Room readiness</span><b>{readyCount} / {roomTotal} READY</b></div>{myTeam.room_id&&(!hand||hand.status==="settled")&&<><button className="gold full" disabled={busy||myTeam.is_ready||roomTotal<2} onClick={()=>run("koc-game",{action:"ready"},"You are marked ready. The hand will start automatically when everyone is ready.")}>{myTeam.is_ready?"WAITING FOR OTHER TEAMS":"I AM READY"}</button><p className="muted">Once every active team in your room is ready, the next hand starts automatically. You do not need an admin to start it.</p></>}</section>}
- {hand&&<section className={"table-panel"+(gameFocus?" game-focus":"")}><div className="table-head"><div><small>{isAdmin?"ADMIN SPECTATOR VIEW":"YOUR LIVE ROOM"}</small><h2>{isAdmin?"ROOM "+(state?.rooms?.find(r=>r.id===roomId)?.room_number||""):"ROOM TABLE"} · HAND {hand.hand_number}/{state?.tournament?.hands_per_room||3}</h2></div><div className="table-head-actions"><span className="tag">{hand.status.toUpperCase()}</span><button className="outline fullscreen-toggle" onClick={()=>setGameFocus(v=>!v)}>{gameFocus?"EXIT FULL SCREEN":"FULL SCREEN"}</button></div></div><div className="poker-table"><div className="table-center"><div className="potlabel">TOTAL POT</div><div className="potvalue">{hand.pot_total.toLocaleString("en-IN")} <small>CHIPS</small></div><div className="community">{[0,1,2,3,4].map(i=>{const c=hand.board?.[i];return <div className={"playing-card boardcard "+(c&&["♥","♦"].includes(c.s)?"red":"")} key={i}>{c?<><b>{c.r===14?"A":c.r===13?"K":c.r===12?"Q":c.r===11?"J":c.r}</b><strong>{c.s}</strong></>:<span>?</span>}</div>})}</div><div className="street-label">{hand.status.toUpperCase()} · BLINDS {state?.tournament?.small_blind} / {state?.tournament?.big_blind}</div></div>{state?.players?.filter(p=>(state?.teams||[]).some((x:any)=>x.id===p.team_id&&x.room_id===roomId||x.id===p.team_id&&x.room_id===myTeam?.room_id)).map(p=><div className={"seat seat"+p.seat_number%6+(p.seat_number===hand.turn_seat?" acting":"")+(p.folded?" folded":"")} key={p.id}><div className="seat-name">{p.team_name}</div><div className="seat-stack"><Wallet size={12}/> {p.stack_current}</div><div className="seat-status">{p.folded?"FOLDED":p.all_in?"ALL IN":p.seat_number===hand.turn_seat?"TO ACT":"IN HAND"}</div><div className="holecards">{p.hole_cards?.length?p.hole_cards.map((c:any,i:number)=><div className={"playing-card mini "+(["♥","♦"].includes(c.s)?"red":"")} key={i}><b>{c.r===14?"A":c.r===13?"K":c.r===12?"Q":c.r===11?"J":c.r}</b><strong>{c.s}</strong></div>):<><div className="playing-card mini back">?</div><div className="playing-card mini back">?</div></>}</div></div>)}</div><div className="table-foot"><span>Dealer seat {hand.dealer_seat+1}</span><span>Current bet {hand.current_bet}</span><span>Minimum raise {hand.min_raise}</span></div>{!isAdmin&&hand.status!=="settled"&&<div className="participant-actions"><div className="turnhint"><b>{myTurn?"YOUR TURN":"WAITING FOR YOUR TURN"}</b>{myTurn?` · ${seconds}s remaining`:" · Actions unlock when it is your turn"}</div><div className="actiongrid">{["fold","check","call","bet","raise","allin"].map(a=><button key={a} disabled={!myTurn||busy||(a==="check"&&myPlayer?.street_bet<hand.current_bet)||(a==="call"&&myPlayer?.street_bet>=hand.current_bet)||(a==="bet"&&hand.current_bet>0)||(a==="raise"&&(hand.current_bet===0||myPlayer?.acted))||(a==="allin"&&myPlayer?.acted&&myPlayer?.stack_current>hand.current_bet-(myPlayer?.street_bet||0))} onClick={()=>run("koc-game",{action:"act",hand_id:hand.id,kind:a,amount:a==="bet"?40:a==="raise"?hand.current_bet+hand.min_raise:undefined},a.toUpperCase()+" submitted.")}>{a==="allin"?"ALL-IN":a.toUpperCase()}</button>)}</div></div>}{hand.status==="settled"&&<div className="resultbox"><Trophy/><div><b>HAND SETTLED</b>{hand.result?.map((r:any,i:number)=><p key={i}>{r.winner_ids?.map((id:string)=>state?.teams?.find((x:any)=>x.id===id)?.team_name||"Winner").join(" / ")} · {r.amount} chips · {r.hand_rank?.join("/")||"Uncontested pot"}</p>)}</div></div>}</section>}
- <section className="panel leaderboard"><div className="panel-title"><div><small>TOURNAMENT STANDINGS</small><h2>GLOBAL LEADERBOARD · TOP 18</h2></div><span className="tag">{sorted.length} TEAMS</span></div><div className="table-scroll"><table><thead><tr><th>RANK</th><th>TEAM</th><th>ROOM</th><th>CHIPS</th><th>STATUS</th></tr></thead><tbody>{sorted.filter((x:any)=>x.status!=="disqualified").map((x,i)=><tr key={x.id}><td>{rankOf(x)}</td><td><b>{x.team_name}</b><small>{x.captain_name}</small></td><td>{state?.rooms?.find(r=>r.id===x.room_id)?.room_number||"—"}</td><td>{x.chip_stack}</td><td><span className={tieAtCutoff(x)?"pending":rankOf(x)<=18?"qualified":"pending"}>{x.status==="disqualified"?"REMOVED":x.status==="left"?"LEFT TABLE":tieAtCutoff(x)?"SUDDEN DEATH REQUIRED":rankOf(x)<=18?"QUALIFICATION ZONE":"OUTSIDE TOP 18"}</span></td></tr>)}</tbody></table></div></section>
- </>}
- <div className="disclaimer"><Shield size={16}/><span>Virtual chips only. Standard No-Limit Texas Hold’em structure. Never use this platform for real-money play. Admin access must be granted to the organiser by assigning the admin role in the secure database.</span></div></main><footer><b>♠ KING OF CHIPS 2.0</b><span>FINCEPTION · GREAT LAKES INSTITUTE OF MANAGEMENT, GURGAON</span><span>VIRTUAL CHIPS ONLY</span></footer></div>;
+
+const URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabase = URL && KEY ? createClient(URL, KEY) : null;
+
+type CardData = { r: number; s: string };
+type OptionData = { label: string; cards: CardData[] };
+type Question = { id: string; hole_cards: CardData[]; options: OptionData[] };
+type QuizData = {
+  tournament: any;
+  settings: any;
+  team: any;
+  is_admin: boolean;
+  attempt: any;
+  questions: Question[];
+  leaderboard: any[];
+  participants: any[];
+};
+
+const rank = (r: number) => ({ 14: "A", 13: "K", 12: "Q", 11: "J" } as Record<number, string>)[r] || String(r);
+const redSuit = (s: string) => s === "♥" || s === "♦";
+
+function PlayingCard({ card, size = "normal", delay = 0 }: { card: CardData; size?: "normal" | "large" | "tiny"; delay?: number }) {
+  return <div className={"playing-card " + size + (redSuit(card.s) ? " red" : "")} style={{ animationDelay: delay + "ms" }}>
+    <b>{rank(card.r)}</b><strong>{card.s}</strong><small>{card.s}</small>
+  </div>;
 }
+
+function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [quiz, setQuiz] = useState<QuizData | null>(null);
+  const [teamName, setTeamName] = useState("");
+  const [captainName, setCaptainName] = useState("");
+  const [password, setPassword] = useState("");
+  const [adminMode, setAdminMode] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [selected, setSelected] = useState("");
+  const [secondsLeft, setSecondsLeft] = useState(20);
+  const [result, setResult] = useState<any>(null);
+  const submitLock = useRef(false);
+  const submitRef = useRef<((option: string | null) => void) | null>(null);
+
+  const api = useCallback(async (fn: string, body: any) => {
+    if (!supabase) throw new Error("The website is missing its Supabase configuration.");
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) throw new Error("Your participant session is not ready. Please refresh.");
+    const response = await fetch(URL + "/functions/v1/" + fn, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": KEY!, "Authorization": "Bearer " + data.session.access_token },
+      body: JSON.stringify(body)
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "The request could not be completed.");
+    return payload;
+  }, []);
+
+  const load = useCallback(async () => {
+    if (!session) return;
+    try {
+      const [base, data] = await Promise.all([api("koc-api", { action: "state" }), api("koc-quiz", { action: "state" })]);
+      setQuiz(data);
+      if (base.my_team && !data.team) setQuiz((current: any) => current ? { ...current, team: base.my_team } : current);
+      setError("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [session, api]);
+
+  useEffect(() => {
+    if (!supabase) { setLoading(false); return; }
+    let alive = true;
+    supabase.auth.getSession().then(async ({ data }) => {
+      let s = data.session;
+      if (!s) {
+        const { data: guest, error: guestError } = await supabase.auth.signInAnonymously();
+        if (guestError) {
+          if (alive) setError(guestError.code === "anonymous_provider_disabled"
+            ? "Anonymous sign-ins are disabled. Enable Anonymous Sign-Ins in Supabase Authentication, then reload."
+            : "Could not create a participant session: " + guestError.message);
+          if (alive) setLoading(false);
+          return;
+        }
+        s = guest.session;
+      }
+      if (alive) setSession(s);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setQuiz(null);
+    });
+    return () => { alive = false; subscription.unsubscribe(); };
+  }, []);
+
+  useEffect(() => { if (session) load(); }, [session, load]);
+  useEffect(() => {
+    if (!session) return;
+    const id = window.setInterval(load, 4000);
+    return () => window.clearInterval(id);
+  }, [session, load]);
+
+  const attempt = quiz?.attempt;
+  const questionIndex = attempt?.current_index ?? 0;
+  const question = attempt?.status === "in_progress" ? quiz?.questions?.[questionIndex] : null;
+  const isAdmin = !!quiz?.is_admin;
+  const isRegistered = !!quiz?.team;
+  const quizStatus = quiz?.settings?.status || "draft";
+
+  const register = async () => {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("koc-api", { action: "register", team_name: teamName.trim(), captain_name: captainName.trim() });
+      setNotice("Registration successful. You're on the list.");
+      await load();
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  const adminLogin = async () => {
+    setBusy(true); setError("");
+    try {
+      await api("koc-api", { action: "admin_login", password });
+      setPassword(""); setAdminMode(false);
+      setNotice("Organiser access granted.");
+      await load();
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  const adminAction = async (action: string) => {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("koc-quiz", { action });
+      setNotice(action === "admin_start" ? "The quiz is live. Good luck to all players!" : action === "admin_reset" ? "Quiz reset. Registrations have been preserved." : "Quiz has been closed.");
+      setResult(null); setSelected("");
+      await load();
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  const startQuiz = async () => {
+    setBusy(true); setError("");
+    try {
+      await api("koc-quiz", { action: "start" });
+      setSelected(""); setResult(null);
+      await load();
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  const submitAnswer = useCallback(async (option: string | null) => {
+    if (submitLock.current || !attempt || attempt.status !== "in_progress") return;
+    submitLock.current = true;
+    setSelected(option || "");
+    try {
+      const response = await api("koc-quiz", { action: "answer", question_index: attempt.current_index, selected_option: option });
+      setResult(response);
+      window.setTimeout(async () => {
+        await load();
+        setResult(null);
+        setSelected("");
+        submitLock.current = false;
+      }, 2300);
+    } catch (e) {
+      const message = (e as Error).message;
+      if (message.toLowerCase().includes("already received") || message.toLowerCase().includes("out of sequence")) {
+        await load();
+      } else {
+        setError(message);
+      }
+      submitLock.current = false;
+    }
+  }, [attempt, api, load]);
+  submitRef.current = submitAnswer;
+
+  useEffect(() => {
+    submitLock.current = false;
+    setSelected("");
+  }, [attempt?.current_index]);
+
+  useEffect(() => {
+    if (!attempt || attempt.status !== "in_progress" || result) return;
+    const tick = () => {
+      const elapsed = Math.max(0, (Date.now() - new Date(attempt.question_started_at).getTime()) / 1000);
+      const remaining = Math.max(0, Math.ceil(20 - elapsed));
+      setSecondsLeft(remaining);
+      if (remaining <= 0) submitRef.current?.(null);
+    };
+    tick();
+    const id = window.setInterval(tick, 100);
+    return () => window.clearInterval(id);
+  }, [attempt?.id, attempt?.current_index, attempt?.question_started_at, attempt?.status, result]);
+
+  const sortedBoard = useMemo(() => quiz?.leaderboard || [], [quiz?.leaderboard]);
+  const completed = attempt?.status === "completed";
+  const totalScore = attempt?.score || 0;
+  const answeredCount = attempt?.answers?.length || 0;
+  const questionProgress = Math.min(20, questionIndex + (result ? 0 : 0));
+  const registrationOpen = quiz?.tournament?.status === "registration";
+
+  if (!URL || !KEY) return <div className="setup-screen"><h1>KING OF CHIPS 2.0</h1><p>Website configuration is incomplete. Supabase URL and publishable key are required.</p></div>;
+
+  return <div className="site-shell">
+    <header className="site-header">
+      <div className="brand-lockup"><div className="brand-icon"><Spade size={25}/></div><div><b>KING OF <i>CHIPS</i></b><small>FINCEPTION · THE FINANCE CLUB</small></div></div>
+      <div className="header-right"><span className="live-tag"><span/> {isAdmin ? "ORGANISER" : "TEXAS HOLD'EM QUIZ"}</span><div className="header-chip">♠ <b>20</b> QUESTIONS</div></div>
+    </header>
+
+    <main className="main-wrap">
+      <section className="hero">
+        <div className="hero-copy">
+          <div className="eyebrow"><span>♠</span> FINCEPTION PRESENTS</div>
+          <h1>READ THE HAND.<br/><em>OWN THE TABLE.</em></h1>
+          <p>20 poker challenges. 20 seconds each. One shot at the crown.</p>
+          <div className="hero-pills"><span><Timer size={14}/> 20 SEC / QUESTION</span><span><Trophy size={14}/> LIVE LEADERBOARD</span><span><Zap size={14}/> 10 POINTS / RIGHT</span></div>
+        </div>
+        <div className="hero-art" aria-hidden="true">
+          <div className="halo halo-one"/><div className="halo halo-two"/>
+          <div className="hero-card hero-card-one"><b>A</b><strong>♠</strong></div>
+          <div className="hero-card hero-card-two"><b>K</b><strong>♥</strong></div>
+          <div className="hero-chip chip-one">♠</div><div className="hero-chip chip-two">♦</div><div className="hero-chip chip-three">♣</div>
+          <div className="hero-wordmark">ALL IN</div>
+        </div>
+      </section>
+
+      {error && <div className="notice error"><AlertTriangle size={17}/><span>{error}</span><button onClick={() => setError("")}>×</button></div>}
+      {notice && <div className="notice success"><CheckCircle2 size={17}/><span>{notice}</span><button onClick={() => setNotice("")}>×</button></div>}
+
+      {!session || loading ? <section className="glass-card loading-card"><div className="loading-spinner"/><h2>SHUFFLING THE DECK</h2><p>Preparing your table…</p></section> :
+      !isRegistered && !isAdmin ? <section className="entry-grid">
+        <div className="glass-card entry-card">
+          <div className="section-kicker">PLAYER REGISTRATION</div><h2>TAKE YOUR SEAT.</h2>
+          <p>Enter your team and captain details to join King of Chips 2.0.</p>
+          {registrationOpen ? <>
+            <label>TEAM NAME<input value={teamName} onChange={e => setTeamName(e.target.value)} placeholder="Your team name"/></label>
+            <label>CAPTAIN / PLAYER NAME<input value={captainName} onChange={e => setCaptainName(e.target.value)} placeholder="Your name"/></label>
+            <button className="gold-button wide" disabled={busy || teamName.trim().length < 2 || captainName.trim().length < 2} onClick={register}>REGISTER & JOIN <ArrowRight size={16}/></button>
+          </> : <div className="waiting-box"><Clock3/><b>REGISTRATION CLOSED</b><span>The organiser has started the quiz. Please contact the event team.</span></div>}
+          <div className="entry-foot">No email or password required. Your browser session keeps your entry connected.</div>
+        </div>
+        <div className="glass-card entry-card admin-entry">
+          <div className="section-kicker">EVENT ORGANISER</div><h2>ADMIN ACCESS.</h2>
+          <p>Manage the quiz, start the round and monitor the leaderboard.</p>
+          {!adminMode ? <button className="outline-button wide" onClick={() => setAdminMode(true)}><Shield size={16}/> ORGANISER LOGIN</button> : <>
+            <label>ADMIN PASSWORD<input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter organiser password"/></label>
+            <button className="gold-button wide" disabled={busy || !password} onClick={adminLogin}>UNLOCK CONTROL ROOM <ArrowRight size={16}/></button>
+            <button className="subtle-button" onClick={() => { setAdminMode(false); setPassword(""); }}>Cancel</button>
+          </>}
+          <div className="entry-foot">Organiser access is protected by the existing admin password.</div>
+        </div>
+      </section> :
+      isAdmin ? <section className="admin-layout">
+        <div className="glass-card admin-main">
+          <div className="admin-title-row"><div><div className="section-kicker">CONTROL ROOM</div><h2>QUIZ OPERATIONS</h2></div><div className={"status-pill " + quizStatus}>{quizStatus.toUpperCase()}</div></div>
+          <div className="admin-stats">
+            <div><small>REGISTERED</small><b>{quiz?.participants?.filter((p:any) => !["left","disqualified"].includes(p.status)).length || 0}</b></div>
+            <div><small>ATTEMPTS</small><b>{quiz?.leaderboard?.length || 0}</b></div>
+            <div><small>QUESTIONS</small><b>20</b></div>
+            <div><small>TIME / Q</small><b>20s</b></div>
+          </div>
+          <div className="admin-controls">
+            {quizStatus === "draft" ? <button className="gold-button wide" disabled={busy || !(quiz?.participants?.length)} onClick={() => { if (window.confirm("Start the 20-question quiz now? Registration will close and the 20-second timer will apply to every question.")) adminAction("admin_start"); }}><Spade size={17}/> START QUIZ FOR EVERYONE</button> :
+            quizStatus === "live" ? <button className="outline-button wide" disabled={busy} onClick={() => { if (window.confirm("End the quiz now? Participants will no longer be able to submit answers.")) adminAction("admin_finish"); }}>END QUIZ</button> :
+            <button className="gold-button wide" disabled={busy} onClick={() => { if (window.confirm("Reset all quiz attempts and reopen registration? Participant registrations will be preserved.")) adminAction("admin_reset"); }}><RotateCcw size={16}/> RESET QUIZ & REOPEN REGISTRATION</button>}
+            {quizStatus !== "draft" && <button className="danger-outline wide" disabled={busy} onClick={() => { if (window.confirm("Reset all quiz scores and reopen registration? Existing participant registrations will be retained.")) adminAction("admin_reset"); }}>RESET ROUND</button>}
+          </div>
+          <div className="admin-note"><Shield size={16}/><span>Each participant gets one attempt. Answers are checked on the server. A timeout records an unanswered question and moves to the next one.</span></div>
+          <div className="admin-section-head"><h3>REGISTERED PLAYERS</h3><span>{quiz?.participants?.length || 0} entries</span></div>
+          <div className="participant-list">
+            {(quiz?.participants || []).filter((p:any) => !["left","disqualified"].includes(p.status)).map((p:any) => <div className="participant-row" key={p.id}><div className="avatar-chip">{(p.team_name || "?").slice(0,1).toUpperCase()}</div><div><b>{p.team_name}</b><small>{p.captain_name}</small></div><span className="player-state">{p.status?.toUpperCase()}</span></div>)}
+            {!quiz?.participants?.length && <div className="empty-state">No registrations yet.</div>}
+          </div>
+        </div>
+        <Leaderboard rows={sortedBoard}/>
+      </section> :
+      <section className="player-layout">
+        <div className="quiz-column">
+          {!attempt ? <div className="glass-card waiting-card">
+            <div className="waiting-emblem"><Spade size={34}/></div><div className="section-kicker">YOU'RE IN THE GAME</div><h2>WELCOME, {quiz?.team?.team_name?.toUpperCase()}.</h2>
+            {quizStatus === "live" ? <><p>The quiz is live. Your 20-second-per-question clock starts when you enter.</p><button className="gold-button wide" disabled={busy} onClick={startQuiz}>ENTER THE QUIZ <ArrowRight size={16}/></button></> :
+              quizStatus === "completed" ? <p>The quiz has ended. Check the leaderboard for final standings.</p> :
+              <><p>You're registered. The organiser will start the quiz shortly.</p><div className="waiting-box"><div className="pulse-dot"/><b>WAITING FOR THE ORGANISER</b><span>Keep this page open. It will update automatically when the quiz starts.</span></div></>}
+          </div> : completed ? <div className="glass-card finish-card">
+            <div className="finish-trophy"><Trophy size={44}/></div><div className="section-kicker">QUIZ COMPLETED</div><h2>YOU PLAYED YOUR HAND.</h2>
+            <div className="final-score"><b>{totalScore}</b><span>/ 200 POINTS</span></div>
+            <div className="finish-stats"><div><b>{attempt.correct_count}/20</b><small>CORRECT ANSWERS</small></div><div><b>{(attempt.total_time_ms/1000).toFixed(1)}s</b><small>TIME USED</small></div></div>
+            <p>Your score is on the live leaderboard. Good game!</p>
+          </div> : question ? <div className="glass-card question-card">
+            <div className="question-topline"><div><div className="section-kicker">HAND {String(questionIndex+1).padStart(2,"0")} <span>/ 20</span></div><h2>FIND YOUR BEST HAND.</h2></div><div className={"countdown " + (secondsLeft <= 5 ? "urgent" : "")}><Clock3 size={16}/><b>{secondsLeft}</b><small>SEC</small></div></div>
+            <div className="progress-track"><div className="progress-fill" style={{width: ((questionIndex)/20*100) + "%"}}/></div>
+            <div className="private-area"><div className="card-label">YOUR PRIVATE CARDS <span>HOLE CARDS</span></div><div className="card-row private-cards">{question.hole_cards.map((c,i)=><PlayingCard key={i} card={c} size="large" delay={i*100}/>)}</div></div>
+            <div className="question-instruction">Which five-card community combination gives you the strongest possible hand?</div>
+            <div className="options-grid">
+              {question.options.map((o) => <button key={o.label} className={"option-card " + (selected===o.label ? "chosen" : "")} disabled={!!result || busy} onClick={() => submitAnswer(o.label)}>
+                <span className="option-letter">{o.label}</span><span className="option-cards">{o.cards.map((c,i)=><PlayingCard key={i} card={c} size="tiny" delay={i*45}/>)}</span><span className="option-select">{selected===o.label ? "SELECTED" : "CHOOSE"}</span>
+              </button>)}
+            </div>
+            <div className="question-footer"><span><Timer size={14}/> 20 SECONDS PER QUESTION</span><span>{questionIndex+1} OF 20</span></div>
+          </div> : <div className="glass-card loading-card"><div className="loading-spinner"/><h2>DEALING THE NEXT HAND</h2></div>}
+        </div>
+        <aside className="side-column">
+          <div className="glass-card player-info"><div className="section-kicker">PLAYER CARD</div><div className="player-name"><div className="avatar-chip big">{quiz?.team?.team_name?.slice(0,1).toUpperCase()}</div><div><b>{quiz?.team?.team_name}</b><small>{quiz?.team?.captain_name}</small></div></div><div className="player-score"><small>YOUR SCORE</small><b>{totalScore}<span> / 200</span></b></div><div className="mini-progress"><div style={{width:(totalScore/200*100)+"%"}}/></div><div className="score-meta"><span>{attempt?.correct_count || 0} correct</span><span>{answeredCount}/20 answered</span></div></div>
+          <Leaderboard rows={sortedBoard} compact/>
+        </aside>
+      </section>}
+
+      {result && <div className={"result-overlay " + (result.correct ? "is-correct" : "is-wrong")}>
+        <div className="result-sparks">{Array.from({length:18},(_,i)=><i key={i} style={{"--i":i} as React.CSSProperties}/>)}</div>
+        <div className="result-content">
+          {result.correct ? <><div className="result-icon"><Crown size={42}/></div><div className="result-kicker">THE CROWD GOES WILD</div><h2>NICE HAND!</h2><div className="points-pop">+10 POINTS</div><p>{result.category} · Correct answer {result.correct_option}</p><div className="reveal-cards">{(result.best_cards||[]).map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*90}/>)}</div><div className="chip-shower"><span>♠</span><span>♦</span><span>♣</span><span>♥</span><span>♠</span><span>♦</span><span>♣</span></div></> :
+          <><div className="result-icon fold-icon"><Spade size={40}/></div><div className="result-kicker">NOT THIS TIME</div><h2>FOLD!</h2><div className="points-pop muted-points">NO POINTS</div><p>Best answer: {result.correct_option} · {result.category}</p></>}
+        </div>
+      </div>}
+      <footer className="site-footer"><span><b>♠ KING OF CHIPS 2.0</b> · FINCEPTION</span><span>PLAY SMART. PLAY FAIR. VIRTUAL CHIPS ONLY.</span></footer>
+    </main>
+  </div>;
+}
+
+function Leaderboard({ rows, compact = false }: { rows: any[]; compact?: boolean }) {
+  return <div className={"glass-card leaderboard-card " + (compact ? "compact" : "")}>
+    <div className="leaderboard-heading"><div><div className="section-kicker">THE RACE FOR THE CROWN</div><h3><Trophy size={17}/> LIVE LEADERBOARD</h3></div><span className="live-mini"><i/> LIVE</span></div>
+    <div className="leaderboard-list">
+      {rows.slice(0, compact ? 8 : 20).map((p:any) => <div className={"leader-row " + (p.rank<=3 ? "top-rank" : "")} key={p.team_id}>
+        <div className="rank-number">{p.rank===1?<Crown size={16}/>:p.rank<=3?<Medal size={15}/>:String(p.rank).padStart(2,"0")}</div>
+        <div className="leader-name"><b>{p.team_name}</b><small>{p.captain_name}</small></div>
+        <div className="leader-points"><b>{p.score}</b><small>{p.correct_count}/20</small></div>
+      </div>)}
+      {!rows.length && <div className="empty-state">The leaderboard will appear once players finish questions.</div>}
+    </div>
+    <div className="leaderboard-foot">RANKED BY SCORE · CORRECT ANSWERS · TIME</div>
+  </div>;
+}
+
 createRoot(document.getElementById("root")!).render(<App/>);
