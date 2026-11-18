@@ -196,3 +196,19 @@ button:disabled{opacity:.48;cursor:not-allowed}
 .is-correct .quip-title{color:#f7d986!important;text-shadow:0 0 24px #d9b95b55}
 .is-wrong .quip-title{color:#f2a99b!important}
 @keyframes quip-stamp{0%{opacity:0;transform:scale(.65) rotate(-3deg)}70%{opacity:1;transform:scale(1.07) rotate(1deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+
+
+/* Synchronized quiz rounds */
+.round-monitor{margin:18px 0 20px;padding:17px 18px;border:1px solid #b99a4c55;border-radius:10px;background:linear-gradient(135deg,#17271f,#111b17)}
+.round-monitor-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0;font:11px 'DM Mono';letter-spacing:.8px;color:#f1d58a}
+.round-monitor-top span{font-size:12px;font-weight:700;color:#fff}
+.submission-track{height:9px;border-radius:20px;background:#33443a;overflow:hidden}
+.submission-track>div{height:100%;border-radius:20px;background:linear-gradient(90deg,#5bc27d,#e3c16a);transition:width .25s ease}
+.round-monitor-foot{margin-top:9px;color:#a9b5aa;font:10px 'DM Mono';letter-spacing:.5px}
+.round-leaderboard{padding:24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px}
+.round-leaderboard>.leaderboard-card{width:100%;text-align:left;margin-top:8px}
+.round-leaderboard>h2{font:700 clamp(27px,4vw,38px) 'Playfair Display';margin:0;color:#f2d58a}
+.round-leaderboard>p{color:#bdc8be;margin:0 0 5px}
+.next-round-countdown{display:flex;align-items:center;gap:8px;color:#e7cb82;font:11px 'DM Mono';letter-spacing:1px;padding:12px 16px;border:1px solid #b99a4c55;border-radius:7px;background:#1b2a21}
+.option-card:disabled{cursor:not-allowed}
+@media(max-width:600px){.round-monitor-top{align-items:flex-start;flex-direction:column}.round-leaderboard{padding:16px}}
