@@ -1,6 +1,7 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
-import {createClient,Session} from "@supabase/supabase-js";
+import {createClient} from "@supabase/supabase-js";
+import type {Session} from "@supabase/supabase-js";
 import {Shield,Spade,Trophy,Users,LogOut,RefreshCw,Play,CheckCircle,Lock,ArrowRight,Timer,Wallet,Copy,AlertCircle} from "lucide-react";
 import "./style.css";
 const URL=import.meta.env.VITE_SUPABASE_URL as string|undefined;
