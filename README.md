@@ -1,30 +1,58 @@
 # King of Chips 2.0
 
-Responsive tournament registration, random-room allocation, room progress and leaderboard interface for Finception.
+Finception's No-Limit Texas Hold'em tournament portal.
 
-## Run
-```bash
-npm install
-cp .env.example .env
-npm run dev
+## Stack
+- React + Vite + TypeScript
+- Supabase Auth, Postgres, Row Level Security and Realtime
+- Supabase Edge Functions: `koc-api` (registration/admin/state) and `koc-game` (server-authoritative dealing/actions/settlement)
+- Vercel production hosting
+
+## Local development
+1. Install Node.js 20+.
+2. Run `npm install`.
+3. Copy `.env.example` to `.env.local`.
+4. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to the Supabase project URL and publishable key.
+5. Run `npm run dev`; production build: `npm run build`.
+
+## Production defaults
+- No-Limit Texas Hold'em
+- Starting stack: 1,000 virtual chips
+- Small blind / big blind: 10 / 20
+- Three hands per room
+- Eight-second action clock; timeout checks when legal, otherwise folds
+- Room capacity default: six; admin can allocate balanced rooms
+- Global qualification threshold: top 18
+- Virtual chips only; no real-money play
+
+## Supabase
+The canonical database schema is in `supabase/schema.sql`. Production migrations are also recorded in Supabase. Edge functions are deployed as `koc-api` and `koc-game`.
+
+The service-role key is used only inside Edge Functions and must never be added to Vercel's `VITE_*` variables or shipped to the browser. The browser receives only the publishable/anon key. Hole-card rows are protected by RLS; the deck column is not granted to authenticated clients.
+
+## Granting tournament administrator access
+New accounts are created with the `participant` role. After the organiser creates and verifies their account, a project owner must promote the exact organiser email in Supabase SQL Editor:
+
+```sql
+update public.profiles
+set role = 'admin'
+where user_id = (
+  select id from auth.users
+  where lower(email) = lower('ORGANISER_EMAIL')
+);
 ```
-Node.js 20+ recommended. Build: `npm run build`.
 
-## Deploy on Vercel
-Import this repository, choose Vite, build command `npm run build`, output directory `dist`. Set `VITE_ADMIN_PIN` before public deployment. The deployed URL can be encoded as the participant QR code; everyone scans the same join URL.
+Never expose admin promotion as a public client-side action. Keep at least two trusted organisers as admins if appropriate.
 
-## What this first release does
-- Public registration: team name and captain name, with a generated Team ID.
-- Organiser PIN-protected dashboard (default demo PIN: 2468; set `VITE_ADMIN_PIN` to override).
-- Open/close registration; random balanced room allocation with adjustable capacity.
-- Room progress monitor with three-hand cap per room.
-- Global leaderboard view, top-10 qualifier labels, tie-break description and CSV export.
-- Responsive dark green / gold design.
+## Important production validation
+Before the event, test with multiple real accounts and separate devices:
+- registration and duplicate prevention
+- balanced room allocation and room isolation
+- hole-card privacy (one account must not read another account's cards)
+- blind/button rotation including heads-up tables
+- all betting streets, minimum raises, short all-ins, side pots and split pots
+- action timeout, disconnect/reconnect and refresh behaviour
+- three-hand room completion and leaderboard tie handling
+- load test for the expected concurrent participants
 
-## Important limitation
-This is a front-end operations prototype. State is persisted in the participant's browser only (localStorage); **it is not shared between devices**. The room advance button is an organiser progress control, not a poker hand engine. No real cards are shuffled/dealt; no private hole cards, turn synchronisation, betting, blinds, pot calculations or side-pot settlement are implemented. Therefore, do not yet use this build for live multi-device gameplay or as a source of official chip balances.
-
-## Production backend required before the event
-Connect a Supabase project and implement server-side Edge Functions for registration, room allocation, hand dealing, action validation, street transitions, settlement and tournament finalisation. Use Postgres transactions/locking and Realtime for shared state. Generate and keep deck/hole cards server-side; expose only a captain's own hole cards through an authenticated function. Enable RLS and test captain/admin access separately. Do not store an admin secret in frontend code as the production auth mechanism.
-
-Tournament defaults: Texas Hold'em, one captain per team, 1,000 virtual starting chips, 10/20 blinds, three hands per room, target five or six teams per room, top ten qualify. Tie-break: final chips, then highest single pot won, then sudden-death hand. Play-money only: no deposits, real-money wagering or cashout.
+The UI and backend are deployed, but a live multi-device tournament rehearsal is still required before using this for a high-stakes college event. No system should be declared event-ready based on a successful build alone.
