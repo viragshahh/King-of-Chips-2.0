@@ -32,11 +32,20 @@ create table if not exists public.quiz_attempts (
 
 create index if not exists quiz_attempts_leaderboard_idx
   on public.quiz_attempts(tournament_id, score desc, correct_count desc, total_time_ms asc);
+create index if not exists quiz_attempts_team_id_idx on public.quiz_attempts(team_id);
+create index if not exists quiz_attempts_user_id_idx on public.quiz_attempts(user_id);
 
 alter table public.quiz_settings enable row level security;
 alter table public.quiz_attempts enable row level security;
 revoke all on public.quiz_settings, public.quiz_attempts from anon, authenticated;
 grant all on public.quiz_settings, public.quiz_attempts to service_role;
+
+drop policy if exists "quiz settings denied to clients" on public.quiz_settings;
+create policy "quiz settings denied to clients" on public.quiz_settings
+  for all to anon, authenticated using (false) with check (false);
+drop policy if exists "quiz attempts denied to clients" on public.quiz_attempts;
+create policy "quiz attempts denied to clients" on public.quiz_attempts
+  for all to anon, authenticated using (false) with check (false);
 
 insert into public.quiz_settings(tournament_id, status, question_seconds, question_count)
 select id, 'draft', 20, 20 from public.tournaments order by created_at limit 1
