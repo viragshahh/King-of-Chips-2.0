@@ -239,3 +239,7 @@ button:disabled{opacity:.48;cursor:not-allowed}
 .submission-dot.pending{background:#c58b55;box-shadow:0 0 8px #c58b5555}
 .result-content .result-waiting{margin-top:14px;color:#d6c58f;font:9px 'DM Mono';letter-spacing:.8px}
 @media(max-width:600px){.admin-options-grid{grid-template-columns:1fr}.submission-people{grid-template-columns:1fr}.admin-live-question{padding:14px}.admin-option .playing-card.tiny{width:34px;height:49px}}
+
+.leaderboard-pending{padding:22px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;color:#d8c17e}
+.leaderboard-pending>b{font:700 10px 'DM Mono';letter-spacing:1px;color:#f0e3bd}
+.leaderboard-pending>span{font-size:11px;line-height:1.5;color:#91a293}
