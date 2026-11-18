@@ -8,6 +8,10 @@ create table if not exists public.quiz_settings (
   question_seconds integer not null default 20 check (question_seconds between 5 and 120),
   question_count integer not null default 20 check (question_count between 1 and 20),
   started_at timestamptz,
+  current_index integer not null default 0 check (current_index between 0 and 20),
+  phase text not null default 'waiting' check (phase in ('waiting','question','leaderboard','complete')),
+  question_started_at timestamptz,
+  phase_started_at timestamptz,
   updated_at timestamptz not null default now()
 );
 
@@ -20,6 +24,7 @@ create table if not exists public.quiz_attempts (
   started_at timestamptz not null default now(),
   question_started_at timestamptz not null default now(),
   current_index integer not null default 0 check (current_index between 0 and 20),
+  last_submitted_index integer not null default -1 check (last_submitted_index between -1 and 19),
   score integer not null default 0,
   correct_count integer not null default 0,
   total_time_ms bigint not null default 0,
