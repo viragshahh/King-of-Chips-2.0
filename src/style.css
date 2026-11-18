@@ -212,3 +212,30 @@ button:disabled{opacity:.48;cursor:not-allowed}
 .next-round-countdown{display:flex;align-items:center;gap:8px;color:#e7cb82;font:11px 'DM Mono';letter-spacing:1px;padding:12px 16px;border:1px solid #b99a4c55;border-radius:7px;background:#1b2a21}
 .option-card:disabled{cursor:not-allowed}
 @media(max-width:600px){.round-monitor-top{align-items:flex-start;flex-direction:column}.round-leaderboard{padding:16px}}
+
+
+/* Organiser live question and 70-player submission board */
+.admin-live-question{margin:18px 0;padding:20px;border:1px solid #b99a4c66;background:linear-gradient(145deg,#14271b,#0d1a12)}
+.admin-question-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 14px}
+.admin-question-top h3{margin:0;color:#f2e5bd;font:700 14px 'DM Mono';letter-spacing:1px}
+.admin-question-top span{color:#e8cc80;font:700 13px 'DM Mono'}
+.admin-hole-cards{display:flex;justify-content:center;gap:12px;padding:12px;margin-bottom:14px;border:1px solid #b99a4c33;border-radius:8px;background:#09160f}
+.admin-options-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.admin-option{position:relative;display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:10px;border:1px solid #50634d;border-radius:8px;background:#0b1b11;min-width:0}
+.admin-option>b{width:24px;height:24px;display:grid;place-items:center;border-radius:5px;background:#2c3b29;color:#f0d58b;font:700 12px 'DM Mono'}
+.admin-option>div{display:flex;gap:3px;flex:1;justify-content:center;min-width:0}
+.admin-option .playing-card.tiny{width:clamp(29px,3.6vw,40px);height:54px}
+.admin-option small{width:100%;color:#9de2a8;text-align:center;font:9px 'DM Mono';letter-spacing:.7px}
+.admin-option-correct{border-color:#76bd80;background:#1a3925;box-shadow:inset 0 0 0 1px #76bd8033}
+.admin-answer-key{margin-top:12px;padding:11px;border-radius:7px;background:#1d3825;border:1px solid #6c9e65;color:#c3d9bd;font:11px 'DM Mono'}
+.admin-answer-key b{color:#f2d58a}
+.admin-submission-list{margin:18px 0}
+.submission-people{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:280px;overflow:auto;padding:10px 0}
+.submission-person{display:flex;align-items:center;gap:8px;min-width:0;padding:8px 9px;border:1px solid #ffffff12;border-radius:6px;background:#0c1b12}
+.submission-person b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#dbe5d9;font-size:10px}
+.submission-person small{font:8px 'DM Mono';color:#87988a;letter-spacing:.4px}
+.submission-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.submission-dot.done{background:#79d28b;box-shadow:0 0 9px #79d28b66}
+.submission-dot.pending{background:#c58b55;box-shadow:0 0 8px #c58b5555}
+.result-content .result-waiting{margin-top:14px;color:#d6c58f;font:9px 'DM Mono';letter-spacing:.8px}
+@media(max-width:600px){.admin-options-grid{grid-template-columns:1fr}.submission-people{grid-template-columns:1fr}.admin-live-question{padding:14px}.admin-option .playing-card.tiny{width:34px;height:49px}}
