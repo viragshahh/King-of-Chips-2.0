@@ -3,14 +3,14 @@
 Finception's timed Texas Hold'em hand-selection quiz.
 
 ## Quiz format
-- 20 multiple-choice questions.
+- 20 multiple-choice poker-hand questions, 20 seconds per question.
 - Each question shows two private hole cards and four possible five-card community-card sets.
-- Participants select the option that produces the strongest five-card poker hand from the seven available cards.
-- 20 seconds per question; timeout is automatically recorded as unanswered and advances the quiz.
-- 10 points per correct answer; maximum score 200.
-- Leaderboard tie-break order: score, number of correct answers, then lowest total response time.
-- Correct answers are evaluated on the server and are not included in the participant question payload.
-- Correct answers trigger a poker-style win animation; incorrect answers trigger a fold animation.
+- 100 points per correct answer, plus up to 20 speed-bonus points based on response time; incorrect and timed-out answers score zero.
+- Leaderboard order: correct answers first, then total points (speed bonus), then lowest total response time.
+- Correct answers are checked server-side and never sent in the question payload.
+- Correct, incorrect and timed-out answers show rotating poker-themed banter with animations.
+- Admin can permanently delete an individual registration while registration is open.
+- Full admin reset permanently deletes all participant registrations and quiz attempts, then reopens registration. Everyone must register again.
 
 ## Stack
 - React + Vite + TypeScript
