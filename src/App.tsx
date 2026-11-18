@@ -356,7 +356,7 @@ function App() {
         </div>
         <aside className="side-column">
           <div className="glass-card player-info"><div className="section-kicker">PLAYER CARD</div><div className="player-name"><div className="avatar-chip big">{quiz?.team?.team_name?.slice(0,1).toUpperCase()}</div><div><b>{quiz?.team?.team_name}</b><small>{quiz?.team?.captain_name}</small></div></div><div className="player-score"><small>YOUR SCORE</small><b>{totalScore}<span> / 2,400</span></b></div><div className="mini-progress"><div style={{width:(totalScore/2400*100)+"%"}}/></div><div className="score-meta"><span>{attempt?.correct_count || 0} correct</span><span>{answeredCount}/20 answered</span></div></div>
-          <Leaderboard rows={sortedBoard} compact/>
+          {(roundPhase === "leaderboard" || quizStatus === "completed") ? <Leaderboard rows={sortedBoard} compact/> : <div className="glass-card leaderboard-pending"><div className="section-kicker">LIVE STANDINGS</div><Trophy size={24}/><b>LEADERBOARD AFTER THE HAND</b><span>Lock in your answer. Standings will appear as soon as the round closes.</span></div>}
         </aside>
       </section>}
 
