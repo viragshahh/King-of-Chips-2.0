@@ -18,6 +18,8 @@ create index if not exists hand_actions_team_id_idx on public.hand_actions(team_
 create table if not exists public.admin_allowlist(email text primary key,created_at timestamptz not null default now());
 alter table public.admin_allowlist enable row level security;
 revoke all on public.admin_allowlist from public,anon,authenticated;
+drop policy if exists "deny all client access" on public.admin_allowlist;
+create policy "deny all client access" on public.admin_allowlist for all to anon,authenticated using(false) with check(false);
 create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path=public as $ begin insert into public.profiles(user_id,display_name,role) values(new.id,coalesce(new.raw_user_meta_data->>'display_name',split_part(new.email,'@',1)),case when exists(select 1 from public.admin_allowlist where lower(email)=lower(new.email)) then 'admin' else 'participant' end) on conflict(user_id) do nothing; return new; end $;
 drop trigger if exists on_auth_user_created_koc on auth.users;
 create trigger on_auth_user_created_koc after insert on auth.users for each row execute procedure public.handle_new_user();
