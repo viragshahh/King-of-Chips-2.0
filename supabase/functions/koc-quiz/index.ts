@@ -74,20 +74,71 @@ Deno.serve(async(req:Request)=>{
     const {data:team}=await db.from("teams").select("id,team_name,captain_name,status,owner_user_id").eq("owner_user_id",uid).eq("tournament_id",t.id).maybeSingle();
     let {data:settings}=await db.from("quiz_settings").select("*").eq("tournament_id",t.id).maybeSingle();
     if(!settings){
-      const {data:created,error:ce}=await db.from("quiz_settings").insert({tournament_id:t.id,status:"draft",question_seconds:20,question_count:20}).select().single();
+      const {data:created,error:ce}=await db.from("quiz_settings").insert({tournament_id:t.id,status:"draft",question_seconds:20,question_count:20,phase:"waiting",current_index:0}).select().single();
       if(ce)return out({error:ce.message},500);settings=created;
     }
     const requireAdmin=()=>{if(!isAdmin)throw new Error("Admin access required.");};
+    const getAttempts=async()=>{
+      const {data,error}=await db.from("quiz_attempts").select("id,team_id,user_id,status,score,correct_count,total_time_ms,started_at,completed_at,answers,last_submitted_index").eq("tournament_id",t.id);
+      if(error)throw error;return data||[];
+    };
     const leaderboard=async()=>{
       const {data,error}=await db.from("quiz_attempts").select("id,team_id,status,score,correct_count,total_time_ms,started_at,completed_at,teams(team_name,captain_name)").eq("tournament_id",t.id).order("correct_count",{ascending:false}).order("score",{ascending:false}).order("total_time_ms",{ascending:true});
       if(error)throw error;
       return (data||[]).map((x:any,i:number)=>({rank:i+1,team_id:x.team_id,team_name:x.teams?.team_name||"Participant",captain_name:x.teams?.captain_name||"",status:x.status,score:x.score,correct_count:x.correct_count,total_time_ms:x.total_time_ms,completed_at:x.completed_at}));
     };
+    const reconcile=async()=>{
+      const {data:current,error:settingsError}=await db.from("quiz_settings").select("*").eq("tournament_id",t.id).single();
+      if(settingsError)throw settingsError;
+      settings=current; 
+      if(settings.status!=="live")return;
+      const idx=Number(settings.current_index||0),now=Date.now(),seconds=Number(settings.question_seconds||20);
+      if(settings.phase==="question"){
+        let attempts=await getAttempts();
+        const deadline=settings.question_started_at?new Date(settings.question_started_at).getTime()+seconds*1000:now;
+        const expired=now>=deadline;
+        if(expired){
+          for(const a of attempts){
+            if(a.status==="completed"||Number(a.last_submitted_index)>=idx)continue;
+            const elapsed=seconds*1000;
+            const entry={question_id:questions[idx].id,selected_option:null,correct:false,correct_option:questions[idx].correct_option,category:questions[idx].category,response_ms:elapsed};
+            const {error}=await db.from("quiz_attempts").update({answers:[...(a.answers||[]),entry],last_submitted_index:idx,current_index:idx+1,total_time_ms:Number(a.total_time_ms||0)+elapsed}).eq("id",a.id).eq("last_submitted_index",Number(a.last_submitted_index));
+            if(error)throw error;
+          }
+          attempts=await getAttempts();
+        }
+        const submitted=attempts.filter((a:any)=>Number(a.last_submitted_index)>=idx).length;
+        if(expired|| (attempts.length>0&&submitted>=attempts.length)){
+          const stamp=new Date().toISOString();
+          await db.from("quiz_settings").update({phase:"leaderboard",phase_started_at:stamp,updated_at:stamp}).eq("tournament_id",t.id).eq("status","live").eq("phase","question").eq("current_index",idx);
+        }
+      } else if(settings.phase==="leaderboard"){
+        const phaseAt=settings.phase_started_at?new Date(settings.phase_started_at).getTime():now;
+        if(now-phaseAt>=5000){
+          const stamp=new Date().toISOString();
+          if(idx>=19){
+            await db.from("quiz_settings").update({status:"completed",phase:"complete",updated_at:stamp}).eq("tournament_id",t.id).eq("status","live").eq("phase","leaderboard").eq("current_index",idx);
+            await db.from("quiz_attempts").update({status:"completed",completed_at:stamp}).eq("tournament_id",t.id).eq("status","in_progress");
+            await db.from("tournaments").update({status:"completed"}).eq("id",t.id);
+          }else{
+            await db.from("quiz_settings").update({phase:"question",current_index:idx+1,question_started_at:stamp,phase_started_at:stamp,updated_at:stamp}).eq("tournament_id",t.id).eq("status","live").eq("phase","leaderboard").eq("current_index",idx);
+          }
+        }
+      }
+      const {data:latest,error:latestError}=await db.from("quiz_settings").select("*").eq("tournament_id",t.id).single();
+      if(latestError)throw latestError;settings=latest;
+    };
     if(b.action==="state"){
+      await reconcile();
       const {data:attempt}=team?await db.from("quiz_attempts").select("*").eq("tournament_id",t.id).eq("team_id",team.id).maybeSingle():{data:null};
+      const attempts=await getAttempts();
+      const idx=Number(settings.current_index||0);
+      const submitted=attempts.filter((a:any)=>Number(a.last_submitted_index)>=idx).length;
+      const seconds=Number(settings.question_seconds||20);
+      const remaining=settings.phase==="question"&&settings.question_started_at?Math.max(0,Math.ceil((new Date(settings.question_started_at).getTime()+seconds*1000-Date.now())/1000)):0;
       const board=await leaderboard();
       const participants=isAdmin?(await db.from("teams").select("id,team_name,captain_name,status,created_at").eq("tournament_id",t.id).order("created_at")).data||[]:[];
-      return out({tournament:{id:t.id,status:t.status,name:t.name},settings,team,is_admin:isAdmin,attempt,questions:publicQuestions,leaderboard:board,participants});
+      return out({tournament:{id:t.id,status:t.status,name:t.name},settings,team,is_admin:isAdmin,attempt,questions:publicQuestions,leaderboard:board,participants,round:{phase:settings.phase,current_index:idx,submitted_count:submitted,total_participants:attempts.length,seconds_remaining:remaining,leaderboard_seconds_remaining:settings.phase==="leaderboard"&&settings.phase_started_at?Math.max(0,5-Math.floor((Date.now()-new Date(settings.phase_started_at).getTime())/1000)):0}});
     }
     if(b.action==="admin_delete_participant"){
       requireAdmin();
@@ -106,14 +157,19 @@ Deno.serve(async(req:Request)=>{
     if(b.action==="admin_start"){
       requireAdmin();
       if(settings.status==="live")return out({error:"The quiz is already live."},409);
-      const {count,error:countError}=await db.from("quiz_attempts").select("id",{count:"exact",head:true}).eq("tournament_id",t.id);
+      const {count,error:countError}=await db.from("teams").select("id",{count:"exact",head:true}).eq("tournament_id",t.id).not("status","in",'("left","disqualified")');
       if(countError)return out({error:countError.message},500);
-      if((count||0)>0)return out({error:"Reset the previous quiz attempts before starting a new round."},409);
+      if(!count)return out({error:"Register at least one participant before starting."},409);
+      const {data:teams,error:teamsError}=await db.from("teams").select("id,owner_user_id").eq("tournament_id",t.id).not("status","in",'("left","disqualified")');
+      if(teamsError)return out({error:teamsError.message},500);
       const now=new Date().toISOString();
-      const {data:updated,error}=await db.from("quiz_settings").update({status:"live",started_at:now,question_seconds:20,question_count:20,updated_at:now}).eq("tournament_id",t.id).select().single();
+      const rows=(teams||[]).map((x:any)=>({tournament_id:t.id,team_id:x.id,user_id:x.owner_user_id,status:"in_progress",started_at:now,question_started_at:now,current_index:0,score:0,correct_count:0,total_time_ms:0,answers:[],last_submitted_index:-1}));
+      const {error:insertError}=await db.from("quiz_attempts").insert(rows);
+      if(insertError)return out({error:insertError.code==="23505"?"Existing attempts found. Reset the quiz before starting again.":insertError.message},409);
+      const {data:updated,error}=await db.from("quiz_settings").update({status:"live",started_at:now,question_started_at:now,phase_started_at:now,phase:"question",current_index:0,question_seconds:20,question_count:20,updated_at:now}).eq("tournament_id",t.id).select().single();
       if(error)return out({error:error.message},500);
       await db.from("tournaments").update({status:"ready"}).eq("id",t.id);
-      return out({ok:true,settings:updated});
+      return out({ok:true,settings:updated,participants:rows.length});
     }
     if(b.action==="admin_reset"){
       requireAdmin();
@@ -123,7 +179,7 @@ Deno.serve(async(req:Request)=>{
       if(roomDeleteError)return out({error:"Could not clear old game rooms: "+roomDeleteError.message},500);
       const {error:teamDeleteError}=await db.from("teams").delete().eq("tournament_id",t.id);
       if(teamDeleteError)return out({error:"Could not permanently delete participant registrations: "+teamDeleteError.message},500);
-      const {data:updated,error}=await db.from("quiz_settings").update({status:"draft",started_at:null,question_seconds:20,question_count:20,updated_at:new Date().toISOString()}).eq("tournament_id",t.id).select().single();
+      const {data:updated,error}=await db.from("quiz_settings").update({status:"draft",started_at:null,question_seconds:20,question_count:20,current_index:0,phase:"waiting",question_started_at:null,phase_started_at:null,updated_at:new Date().toISOString()}).eq("tournament_id",t.id).select().single();
       if(error)return out({error:error.message},500);
       const {error:tournamentError}=await db.from("tournaments").update({status:"registration"}).eq("id",t.id);
       if(tournamentError)return out({error:tournamentError.message},500);
@@ -131,54 +187,37 @@ Deno.serve(async(req:Request)=>{
     }
     if(b.action==="admin_finish"){
       requireAdmin();
-      const {data:updated,error}=await db.from("quiz_settings").update({status:"completed",updated_at:new Date().toISOString()}).eq("tournament_id",t.id).select().single();
+      const stamp=new Date().toISOString();
+      const {data:updated,error}=await db.from("quiz_settings").update({status:"completed",phase:"complete",updated_at:stamp}).eq("tournament_id",t.id).select().single();
       if(error)return out({error:error.message},500);
-      const finishedAt=new Date().toISOString();
-      const {error:finishAttemptsError}=await db.from("quiz_attempts").update({status:"completed",completed_at:finishedAt}).eq("tournament_id",t.id).eq("status","in_progress");
+      const {error:finishAttemptsError}=await db.from("quiz_attempts").update({status:"completed",completed_at:stamp}).eq("tournament_id",t.id).eq("status","in_progress");
       if(finishAttemptsError)return out({error:finishAttemptsError.message},500);
       await db.from("tournaments").update({status:"completed"}).eq("id",t.id);
       return out({ok:true,settings:updated});
     }
-    if(b.action==="start"){
-      if(!team)return out({error:"Register before joining the quiz."},403);
-      if(["left","disqualified"].includes(team.status))return out({error:"This registration is not eligible to participate."},403);
-      if(settings.status!=="live")return out({error:"The organiser has not started the quiz yet."},409);
-      const {data:existing}=await db.from("quiz_attempts").select("*").eq("tournament_id",t.id).eq("team_id",team.id).maybeSingle();
-      if(existing)return out({attempt:existing});
-      const now=new Date().toISOString();
-      const {data:attempt,error}=await db.from("quiz_attempts").insert({tournament_id:t.id,team_id:team.id,user_id:uid,status:"in_progress",started_at:now,question_started_at:now,current_index:0,score:0,correct_count:0,total_time_ms:0,answers:[]}).select().single();
-      if(error)return out({error:error.code==="23505"?"This team already has a quiz attempt.":error.message},409);
-      return out({attempt});
-    }
     if(b.action==="answer"){
-      if(settings.status!=="live")return out({error:"The quiz is closed. No further answers can be submitted."},409);
+      await reconcile();
+      if(settings.status!=="live"||settings.phase!=="question")return out({error:"This question is closed. Wait for the next question."},409);
       if(!team)return out({error:"Participant registration was not found."},403);
+      const index=Number(settings.current_index),seconds=Number(settings.question_seconds||20);
+      if(Number(b.question_index)!==index)return out({error:"This is not the active question."},409);
+      const elapsed=Math.max(0,Date.now()-new Date(settings.question_started_at).getTime());
+      if(elapsed>=seconds*1000)return out({error:"Time is up. Your answer is locked."},409);
       const {data:attempt,error:ae}=await db.from("quiz_attempts").select("*").eq("tournament_id",t.id).eq("team_id",team.id).maybeSingle();
-      if(ae||!attempt)return out({error:"Start the quiz before submitting an answer."},404);
+      if(ae||!attempt)return out({error:"Your quiz attempt was not prepared. Contact the organiser."},404);
       if(attempt.status!=="in_progress")return out({error:"This quiz attempt is already complete."},409);
-      const index=Number(b.question_index);
-      if(index!==attempt.current_index)return out({error:"This question has already been answered or is out of sequence."},409);
-      if(index<0||index>=20)return out({error:"No question remains."},400);
-      const elapsed=Math.max(0,Date.now()-new Date(attempt.question_started_at).getTime());
-      const timedOut=elapsed>20000;
-      const selected=timedOut?null:(b.selected_option==null?null:String(b.selected_option).toUpperCase());
-      if(selected!==null&&!["A","B","C","D"].includes(selected))return out({error:"Select one of the four options."},400);
-      if(selected===null&&!timedOut&&elapsed<20000)return out({error:"Choose an option before the timer ends."},400);
+      if(Number(attempt.last_submitted_index)>=index)return out({error:"Your answer for this question is already locked."},409);
+      const selected=b.selected_option==null?null:String(b.selected_option).toUpperCase();
+      if(!selected||!["A","B","C","D"].includes(selected))return out({error:"Select one of the four options."},400);
       const q=questions[index],correct=selected===q.correct_option;
-      const next=index+1,completed=next>=20,now=new Date().toISOString();
-      const entry={question_id:q.id,selected_option:selected,correct,correct_option:q.correct_option,category:q.category,response_ms:Math.min(elapsed,20000)};
-      const answers=[...(attempt.answers||[]),entry];
-      const speedBonus=correct?Math.max(0,Math.ceil((20000-Math.min(elapsed,20000))/1000)):0;
+      const speedBonus=correct?Math.max(0,Math.ceil((seconds*1000-elapsed)/1000)):0;
       const pointsEarned=correct?100+speedBonus:0;
-      const correctQuips=["CERTIFIED JUWARI!","TABLE KA ASLI SIKANDAR!","DEALER BHI SALUTE MAARE!","CHIPS KI BAARISH, BOSS!","AAJ TOH KISMAT ALL-IN HAI!","POKER FACE, PERFECT ACE!","CASINO KO GHAR BEJH DIYA!","YEH HAATH NAHI, MASTERCLASS THI!","FULL HOUSE OF TALENT!","BOSS LEVEL JUWARI!","BAAP RE BAAP, KYA HAND HAI!","SEAT BELT BAANDH, SHARK AAYA!"];
-      const wrongQuips=["DOOB GAYE SAARE PAISE!","YEH HAATH NAHI, HEARTBREAK THA!","DEALER NE AANKHON MEIN DHool JHOK DI!","CHIPS GAYE TEL LENE!","BLUFF BHI NAHI CHALA!","POKER FACE THA, PAR ANSWER WRONG!","TABLE NE AAPKO FOLD KAR DIYA!","KISMAT NE BHI DISCONNECT KAR DIYA!","ALL-IN GAYE, ALL-OUT AAYE!","AAJ CARDS AAPKE SAATH NAHI HAIN!","YEH MOVE DEKH KE DEALER BHI RO DIYA!","JEB GARMAI NAHI, KHALI HO GAYI!"];
-      const timeoutQuips=["TIME OUT, JUWARI! GHADI JEET GAYI!","SOCHTE REH GAYE, BLINDS NIKAL GAYE!","20 SECOND THE, NOVEL NAHI LIKHNA THA!","CLOCK NE AAPKO FOLD KAR DIYA!"];
-      const quip=(timedOut?timeoutQuips:(correct?correctQuips:wrongQuips))[Math.floor(Math.random()*(timedOut?timeoutQuips.length:(correct?correctQuips.length:wrongQuips.length)))];
-      const patch={current_index:next,question_started_at:now,answers,score:attempt.score+pointsEarned,correct_count:attempt.correct_count+(correct?1:0),total_time_ms:attempt.total_time_ms+Math.min(elapsed,20000),status:completed?"completed":"in_progress",completed_at:completed?now:null};
-      const {data:updated,error:upError}=await db.from("quiz_attempts").update(patch).eq("id",attempt.id).eq("current_index",index).select().maybeSingle();
+      const entry={question_id:q.id,selected_option:selected,correct,correct_option:q.correct_option,category:q.category,response_ms:Math.min(elapsed,seconds*1000)};
+      const answers=[...(attempt.answers||[]),entry];
+      const {data:updated,error:upError}=await db.from("quiz_attempts").update({answers,last_submitted_index:index,current_index:index+1,score:Number(attempt.score)+pointsEarned,correct_count:Number(attempt.correct_count)+(correct?1:0),total_time_ms:Number(attempt.total_time_ms)+Math.min(elapsed,seconds*1000)}).eq("id",attempt.id).eq("last_submitted_index",index-1).select().maybeSingle();
       if(upError)return out({error:upError.message},500);
-      if(!updated)return out({error:"Answer already received. Please wait for the next question."},409);
-      return out({accepted:true,correct,quip,timed_out:timedOut,points_earned:pointsEarned,speed_bonus:speedBonus,correct_option:q.correct_option,category:q.category,best_cards:q.best_cards,next_index:next,completed,score:updated.score,correct_count:updated.correct_count,attempt:updated});
+      if(!updated)return out({error:"Your answer is already locked. Please wait."},409);
+      return out({accepted:true,locked:true,points_earned:pointsEarned,attempt:{score:updated.score,correct_count:updated.correct_count,last_submitted_index:updated.last_submitted_index}});
     }
     return out({error:"Unknown quiz action."},400);
   }catch(e){return out({error:e instanceof Error?e.message:"Unexpected server error."},500);}
