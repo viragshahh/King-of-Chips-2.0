@@ -68,12 +68,17 @@ Deno.serve(async(req:Request)=>{
     const uid=claimsData?.claims?.sub as string | undefined;
     if(userError||!uid)return out({error:"A participant session is required."},401);
     const b=await req.json();
-    const {data:t,error:te}=await db.from("tournaments").select("*").order("created_at",{ascending:true}).limit(1).maybeSingle();
+    const [{data:t,error:te},{data:profile}]=await Promise.all([
+      db.from("tournaments").select("*").order("created_at",{ascending:true}).limit(1).maybeSingle(),
+      db.from("profiles").select("role").eq("user_id",uid).maybeSingle()
+    ]);
     if(te||!t)return out({error:"Tournament configuration was not found."},500);
-    const {data:profile}=await db.from("profiles").select("role").eq("user_id",uid).maybeSingle();
     const isAdmin=profile?.role==="admin";
-    const {data:team}=await db.from("teams").select("id,team_name,captain_name,status,owner_user_id").eq("owner_user_id",uid).eq("tournament_id",t.id).maybeSingle();
-    let {data:settings}=await db.from("quiz_settings").select("*").eq("tournament_id",t.id).maybeSingle();
+    const [{data:team},{data:initialSettings}]=await Promise.all([
+      db.from("teams").select("id,team_name,captain_name,status,owner_user_id").eq("owner_user_id",uid).eq("tournament_id",t.id).maybeSingle(),
+      db.from("quiz_settings").select("*").eq("tournament_id",t.id).maybeSingle()
+    ]);
+    let settings=initialSettings;
     if(!settings){
       const {data:created,error:ce}=await db.from("quiz_settings").insert({tournament_id:t.id,status:"draft",question_seconds:20,question_count:20,phase:"waiting",current_index:0}).select().single();
       if(ce)return out({error:ce.message},500);settings=created;
