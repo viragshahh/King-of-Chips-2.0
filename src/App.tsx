@@ -52,6 +52,7 @@ function App() {
   const submitLock = useRef(false);
   const submitRef = useRef<((option: string | null) => void) | null>(null);
   const shownResultRef = useRef<number | null>(null);
+  const loadInFlight = useRef(false);
 
   const api = useCallback(async (fn: string, body: any) => {
     if (!supabase) throw new Error("The website is missing its Supabase configuration.");
@@ -68,7 +69,8 @@ function App() {
   }, []);
 
   const load = useCallback(async () => {
-    if (!session) return;
+    if (!session || loadInFlight.current) return;
+    loadInFlight.current = true;
     try {
       const data = await api("koc-quiz", { action: "state" });
       setQuiz(data);
@@ -77,6 +79,7 @@ function App() {
       setError((e as Error).message);
     } finally {
       setLoading(false);
+      loadInFlight.current = false;
     }
   }, [session, api]);
 
@@ -111,7 +114,7 @@ function App() {
   useEffect(() => { if (session) load(); }, [session, load]);
   useEffect(() => {
     if (!session) return;
-    const id = window.setInterval(load, 2000);
+    const id = window.setInterval(load, 4000);
     return () => window.clearInterval(id);
   }, [session, load]);
 
