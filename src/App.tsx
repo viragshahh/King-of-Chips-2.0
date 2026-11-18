@@ -231,6 +231,8 @@ function App() {
   const totalScore = attempt?.score || 0;
   const answeredCount = attempt?.answers?.length || 0;
   const registrationOpen = quiz?.tournament?.status === "registration";
+  const registrationUrl = window.location.origin;
+  const registrationQrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=12&data=" + encodeURIComponent(registrationUrl);
 
   if (!URL || !KEY) return <div className="setup-screen"><h1>KING OF CHIPS 2.0</h1><p>Website configuration is incomplete. Supabase URL and publishable key are required.</p></div>;
 
@@ -297,6 +299,16 @@ function App() {
             quizStatus === "live" ? <button className="outline-button wide" disabled={busy} onClick={() => { if (window.confirm("End the quiz now? Participants will no longer be able to submit answers.")) adminAction("admin_finish"); }}>END QUIZ</button> :
             <div className="waiting-box"><b>QUIZ COMPLETED</b><span>Reset the event to clear all registrations and open a fresh registration round.</span></div>}
             <button className="danger-outline wide" disabled={busy} onClick={() => { if (window.confirm("PERMANENT RESET: This will permanently delete ALL participant registrations and quiz attempts. Everyone will have to register again. This cannot be undone. Continue?")) adminAction("admin_reset"); }}><RotateCcw size={16}/> RESET & DELETE ALL PARTICIPANTS</button>
+          </div>
+          <div className="glass-card registration-qr-card">
+            <div className="section-kicker">PARTICIPANT REGISTRATION</div>
+            <h3>SCAN TO JOIN THE TABLE</h3>
+            <p>Display this QR code on the projector. Participants can scan it to open the registration page.</p>
+            <a className="registration-qr-image" href={registrationUrl} target="_blank" rel="noreferrer" aria-label="Open participant registration page">
+              <img src={registrationQrUrl} alt="QR code for King of Chips 2.0 participant registration" />
+            </a>
+            <div className="registration-qr-url">{registrationUrl}</div>
+            <a className="outline-button registration-open-link" href={registrationUrl} target="_blank" rel="noreferrer">OPEN REGISTRATION PAGE <ArrowRight size={15}/></a>
           </div>
           {quizStatus === "live" && <div className="round-monitor">
             <div className="section-kicker">LIVE ROUND MONITOR</div>
