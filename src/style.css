@@ -245,3 +245,14 @@ button:disabled{opacity:.48;cursor:not-allowed}
 .leaderboard-pending>span{font-size:11px;line-height:1.5;color:#91a293}
 
 .admin-question-prompt{margin:0 0 12px;text-align:center;color:#c9d6c8;font-size:12px;line-height:1.5}
+
+
+/* Participant registration QR in organiser Control Room */
+.registration-qr-card{margin-top:18px;padding:20px;display:flex;flex-direction:column;align-items:center;text-align:center}
+.registration-qr-card h3{margin:8px 0;color:#f4e8c7;font:700 17px 'Playfair Display';letter-spacing:.5px}
+.registration-qr-card p{max-width:440px;margin:0 0 15px;color:#a7b5a8;font-size:11px;line-height:1.55}
+.registration-qr-image{display:block;padding:10px;background:#fff;border:1px solid #d8c27f;border-radius:10px;line-height:0;box-shadow:0 8px 28px #0005}
+.registration-qr-image img{display:block;width:210px;height:210px;max-width:100%;object-fit:contain}
+.registration-qr-url{margin-top:12px;color:#d8c27f;font:10px 'DM Mono';overflow-wrap:anywhere}
+.registration-open-link{margin-top:12px;text-decoration:none}
+@media(max-width:600px){.registration-qr-image img{width:190px;height:190px}}
