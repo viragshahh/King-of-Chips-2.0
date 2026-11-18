@@ -21,6 +21,7 @@ type QuizData = {
   questions: Question[];
   leaderboard: any[];
   participants: any[];
+  last_round_result?: any;
   round?: { phase: string; current_index: number; submitted_count: number; total_participants: number; seconds_remaining: number; leaderboard_seconds_remaining: number };
 };
 
@@ -49,6 +50,7 @@ function App() {
   const [result, setResult] = useState<any>(null);
   const submitLock = useRef(false);
   const submitRef = useRef<((option: string | null) => void) | null>(null);
+  const shownResultRef = useRef<number | null>(null);
 
   const api = useCallback(async (fn: string, body: any) => {
     if (!supabase) throw new Error("The website is missing its Supabase configuration.");
@@ -67,9 +69,8 @@ function App() {
   const load = useCallback(async () => {
     if (!session) return;
     try {
-      const [base, data] = await Promise.all([api("koc-api", { action: "state" }), api("koc-quiz", { action: "state" })]);
+      const data = await api("koc-quiz", { action: "state" });
       setQuiz(data);
-      if (base.my_team && !data.team) setQuiz((current: any) => current ? { ...current, team: base.my_team } : current);
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -106,7 +107,7 @@ function App() {
   useEffect(() => { if (session) load(); }, [session, load]);
   useEffect(() => {
     if (!session) return;
-    const id = window.setInterval(load, 1000);
+    const id = window.setInterval(load, 2000);
     return () => window.clearInterval(id);
   }, [session, load]);
 
@@ -178,7 +179,9 @@ function App() {
     submitLock.current = true;
     setSelected(option);
     try {
-      await api("koc-quiz", { action: "answer", question_index: questionIndex, selected_option: option });
+      const response = await api("koc-quiz", { action: "answer", question_index: questionIndex, selected_option: option });
+      shownResultRef.current = questionIndex;
+      setResult({ ...response, question_index: questionIndex });
       await load();
     } catch (e) {
       const message = (e as Error).message;
@@ -196,7 +199,19 @@ function App() {
   useEffect(() => {
     submitLock.current = false;
     setSelected("");
+    setResult(null);
+    shownResultRef.current = null;
   }, [questionIndex]);
+
+  useEffect(() => {
+    const roundResult = quiz?.last_round_result;
+    if (!roundResult || Number(roundResult.question_index) !== questionIndex) return;
+    if (shownResultRef.current === questionIndex) return;
+    const timeoutQuips = ["TIME OUT, JUWARI! GHADI JEET GAYI!","SOCHTE REH GAYE, BLINDS NIKAL GAYE!","20 SECOND THE, NOVEL NAHI LIKHNA THA!","CLOCK NE AAPKO FOLD KAR DIYA!"];
+    const quip = roundResult.timed_out ? timeoutQuips[Math.floor(Math.random()*timeoutQuips.length)] : (roundResult.correct ? "CERTIFIED JUWARI!" : "DOOB GAYE SAARE PAISE!");
+    setResult({ ...roundResult, quip });
+    shownResultRef.current = questionIndex;
+  }, [quiz?.last_round_result, questionIndex]);
 
   useEffect(() => {
     if (quizStatus !== "live" || roundPhase !== "question" || !quiz?.settings?.question_started_at) return;
@@ -288,7 +303,18 @@ function App() {
             <div className="submission-track"><div style={{width: ((quiz?.round?.total_participants ? (quiz.round.submitted_count/quiz.round.total_participants)*100 : 0)) + "%"}}/></div>
             <div className="round-monitor-foot">{roundPhase === "question" ? (quiz?.round?.seconds_remaining || 0) + " seconds remaining · Answers lock individually" : roundPhase === "leaderboard" ? "Next question in " + (quiz?.round?.leaderboard_seconds_remaining || 0) + " seconds" : "All rounds complete"}</div>
           </div>}
-          <div className="admin-note"><Shield size={16}/><span>Every question is shared and timed for all participants. Answers lock on submission. After everyone submits or time expires, the leaderboard is shown for 5 seconds before the next question begins.</span></div>
+          {quizStatus === "live" && quiz?.questions?.[questionIndex] && <div className="glass-card admin-live-question">
+            <div className="section-kicker">LIVE QUESTION PREVIEW · ROUND {questionIndex+1}/20</div>
+            <div className="admin-question-top"><h3>{roundPhase === "leaderboard" ? "ROUND ANSWER REVEAL" : "CURRENT QUESTION"}</h3><span>{quiz?.round?.seconds_remaining || 0}s LEFT</span></div>
+            <div className="admin-hole-cards">{quiz.questions[questionIndex].hole_cards.map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="normal" delay={i*70}/>)}</div>
+            <div className="admin-options-grid">{quiz.questions[questionIndex].options.map((o:OptionData)=><div key={o.label} className={"admin-option " + (roundPhase === "leaderboard" && o.label === (quiz?.last_round_result?.correct_option || "") ? "admin-option-correct" : "")}><b>{o.label}</b><div>{o.cards.map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*30}/>)}</div>{roundPhase === "leaderboard" && o.label === quiz?.last_round_result?.correct_option && <small>✓ CORRECT ANSWER</small>}</div>)}</div>
+            {roundPhase === "leaderboard" && <div className="admin-answer-key">Correct answer: <b>{quiz?.questions?.[questionIndex]?.options?.find((o:OptionData)=>o.label===quiz?.last_round_result?.correct_option)?.label || "See official key"}</b> · {quiz?.last_round_result?.category || ""}</div>}
+          </div>}
+          <div className="admin-submission-list">
+            <div className="admin-section-head"><h3>ROUND SUBMISSIONS</h3><span>{quiz?.round?.submitted_count || 0} / {quiz?.round?.total_participants || 0} LOCKED</span></div>
+            <div className="submission-people">{(quiz?.participants || []).map((p:any)=><div className="submission-person" key={p.id}><span className={"submission-dot " + (p.has_submitted ? "done" : "pending")}/><b>{p.team_name}</b><small>{p.has_submitted ? "SUBMITTED" : "WAITING"}</small></div>)}</div>
+          </div>
+          <div className="admin-note"><Shield size={16}/><span>Every participant sees the same question and deadline. Submitted answers lock immediately. The leaderboard appears when everyone submits or the timer expires.</span></div>
           <div className="admin-section-head"><h3>REGISTERED PLAYERS</h3><span>{quiz?.participants?.length || 0} entries</span></div>
           <div className="participant-list">
             {(quiz?.participants || []).filter((p:any) => !["left","disqualified"].includes(p.status)).map((p:any) => <div className="participant-row" key={p.id}><div className="avatar-chip">{(p.team_name || "?").slice(0,1).toUpperCase()}</div><div><b>{p.team_name}</b><small>{p.captain_name}</small></div><span className="player-state">{p.status?.toUpperCase()}</span><button className="delete-participant" disabled={busy || quizStatus !== "draft"} title={quizStatus !== "draft" ? "Individual deletion is available while registration is open" : "Permanently delete " + p.team_name} onClick={() => deleteParticipant(p)}>DELETE</button></div>)}
@@ -333,11 +359,11 @@ function App() {
         </aside>
       </section>}
 
-      {false && result && <div className={"result-overlay " + (result.correct ? "is-correct" : "is-wrong")}>
+      {result && !isAdmin && <div className={"result-overlay " + (result.correct ? "is-correct" : "is-wrong")}>
         <div className="result-sparks">{Array.from({length:18},(_,i)=><i key={i} style={{"--i":i} as React.CSSProperties}/>)}</div>
         <div className="result-content">
-          {result.correct ? <><div className="result-icon"><Crown size={42}/></div><div className="result-kicker">THE CROWD GOES WILD</div><div className="points-pop">+{result.points_earned} POINTS {result.speed_bonus > 0 ? "(+" + result.speed_bonus + " SPEED)" : ""}</div><h2 className="quip-title">{result.quip || "CERTIFIED JUWARI!"}</h2><p>{result.category} · Correct answer {result.correct_option}</p><div className="reveal-cards">{(result.best_cards||[]).map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*90}/>)}</div><div className="chip-shower"><span>♠</span><span>♦</span><span>♣</span><span>♥</span><span>♠</span><span>♦</span><span>♣</span></div></> :
-          <><div className="result-icon fold-icon"><Spade size={40}/></div><div className="result-kicker">NOT THIS TIME</div><h2 className="quip-title">{result.quip || "DOOB GAYE SAARE PAISE!"}</h2><div className="points-pop muted-points">NO POINTS</div><p>{result.timed_out ? "TIME'S UP! " : ""}Best answer: {result.correct_option} · {result.category}</p></>}
+          {result.correct ? <><div className="result-icon"><Crown size={42}/></div><div className="result-kicker">THE CROWD GOES WILD</div><div className="points-pop">+{result.points_earned} POINTS {result.speed_bonus > 0 ? "(+" + result.speed_bonus + " SPEED)" : ""}</div><h2 className="quip-title">{result.quip || "CERTIFIED JUWARI!"}</h2><p>{result.category} · Your answer {result.selected_option || "NOT ANSWERED"} · Correct answer {result.correct_option}</p><div className="reveal-cards">{(result.best_cards||[]).map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*90}/>)}</div><div className="chip-shower"><span>♠</span><span>♦</span><span>♣</span><span>♥</span><span>♠</span><span>♦</span><span>♣</span></div></> :
+          <><div className="result-icon fold-icon"><Spade size={40}/></div><div className="result-kicker">NOT THIS TIME</div><h2 className="quip-title">{result.quip || "DOOB GAYE SAARE PAISE!"}</h2><div className="points-pop muted-points">NO POINTS</div><p>{result.timed_out ? "TIME'S UP! " : ""}Your answer: {result.selected_option || "NOT ANSWERED"} · Best answer: {result.correct_option} · {result.category}</p><div className="reveal-cards">{(result.best_cards||[]).map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*90}/>)}</div></>}
         </div>
       </div>}
       <footer className="site-footer"><span><b>♠ KING OF CHIPS 2.0</b> · FINCEPTION</span><span>PLAY SMART. PLAY FAIR. VIRTUAL CHIPS ONLY.</span></footer>
