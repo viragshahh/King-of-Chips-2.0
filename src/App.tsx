@@ -112,10 +112,10 @@ function App() {
   const attempt = quiz?.attempt;
   const questionIndex = Number(quiz?.settings?.current_index ?? 0);
   const roundPhase = quiz?.settings?.phase || "waiting";
-  const question = quizStatusPlaceholder(quiz) === "live" && roundPhase === "question" ? quiz?.questions?.[questionIndex] : null;
   const isAdmin = !!quiz?.is_admin;
   const isRegistered = !!quiz?.team;
   const quizStatus = quiz?.settings?.status || "draft";
+  const question = quizStatus === "live" && roundPhase === "question" ? quiz?.questions?.[questionIndex] : null;
   const answerLocked = !!attempt && Number(attempt.last_submitted_index ?? -1) >= questionIndex;
   const mySelectedOption = selected || (answerLocked ? (attempt?.answers?.[questionIndex]?.selected_option || "") : "");
 
@@ -294,7 +294,7 @@ function App() {
             {!quiz?.participants?.length && <div className="empty-state">No registrations yet.</div>}
           </div>
         </div>
-        <Leaderboard rows={sortedBoard}/>
+        {(roundPhase === "leaderboard" || quizStatus === "completed") && <Leaderboard rows={sortedBoard}/>}
       </section> :
       <section className="player-layout">
         <div className="quiz-column">
