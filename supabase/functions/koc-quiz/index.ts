@@ -130,7 +130,7 @@ Deno.serve(async(req:Request)=>{
         }
       } else if(settings.phase==="leaderboard"){
         const phaseAt=settings.phase_started_at?new Date(settings.phase_started_at).getTime():now;
-        if(now-phaseAt>=5000){
+        if(now-phaseAt>=8000){
           const stamp=new Date().toISOString();
           if(idx>=19){
             await db.from("quiz_settings").update({status:"completed",phase:"complete",updated_at:stamp}).eq("tournament_id",t.id).eq("status","live").eq("phase","leaderboard").eq("current_index",idx);
@@ -180,7 +180,7 @@ Deno.serve(async(req:Request)=>{
         speed_bonus:answer.correct?Math.max(0,Math.ceil((seconds*1000-Number(answer.response_ms||0))/1000)):0,
         timed_out:!answer.selected_option,best_cards:questions[idx]?.best_cards||[]
       }:null;
-      return out({tournament:{id:t.id,status:t.status,name:t.name},settings,team,is_admin:isAdmin,attempt,questions:publicQuestions,admin_questions:isAdmin?questions:undefined,leaderboard:board,participants:participantProgress,last_round_result:lastRoundResult,round:{phase:settings.phase,current_index:idx,submitted_count:submitted,total_participants:totalParticipants,seconds_remaining:remaining,leaderboard_seconds_remaining:settings.phase==="leaderboard"&&settings.phase_started_at?Math.max(0,5-Math.floor((Date.now()-new Date(settings.phase_started_at).getTime())/1000)):0}});
+      return out({tournament:{id:t.id,status:t.status,name:t.name},settings,team,is_admin:isAdmin,attempt,questions:publicQuestions,admin_questions:isAdmin?questions:undefined,leaderboard:board,participants:participantProgress,last_round_result:lastRoundResult,round:{phase:settings.phase,current_index:idx,submitted_count:submitted,total_participants:totalParticipants,seconds_remaining:remaining,leaderboard_seconds_remaining:settings.phase==="leaderboard"&&settings.phase_started_at?Math.max(0,8-Math.floor((Date.now()-new Date(settings.phase_started_at).getTime())/1000)):0}});
     }
     if(b.action==="admin_delete_participant"){
       requireAdmin();
@@ -238,7 +238,6 @@ Deno.serve(async(req:Request)=>{
       return out({ok:true,settings:updated});
     }
     if(b.action==="answer"){
-      await reconcile();
       if(settings.status!=="live"||settings.phase!=="question")return out({error:"This question is closed. Wait for the next question."},409);
       if(!team)return out({error:"Participant registration was not found."},403);
       const index=Number(settings.current_index),seconds=Number(settings.question_seconds||20);
