@@ -141,8 +141,19 @@ function App() {
     setBusy(true); setError(""); setNotice("");
     try {
       await api("koc-quiz", { action });
-      setNotice(action === "admin_start" ? "The quiz is live. Good luck to all players!" : action === "admin_reset" ? "Quiz reset. Registrations have been preserved." : "Quiz has been closed.");
+      setNotice(action === "admin_start" ? "The quiz is live. Good luck to all players!" : action === "admin_reset" ? "Full reset complete. All participant registrations and quiz attempts have been permanently deleted. Everyone must register again." : "Quiz has been closed.");
       setResult(null); setSelected("");
+      await load();
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  const deleteParticipant = async (participant: any) => {
+    if (!window.confirm("Permanently delete " + participant.team_name + "? Their registration and quiz attempt will be deleted. They must register again to participate.")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api("koc-quiz", { action: "admin_delete_participant", team_id: participant.id });
+      setNotice(participant.team_name + " has been permanently deleted. They must register again.");
       await load();
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
@@ -222,7 +233,7 @@ function App() {
           <div className="eyebrow"><span>♠</span> FINCEPTION PRESENTS</div>
           <h1>READ THE HAND.<br/><em>OWN THE TABLE.</em></h1>
           <p>20 poker challenges. 20 seconds each. One shot at the crown.</p>
-          <div className="hero-pills"><span><Timer size={14}/> 20 SEC / QUESTION</span><span><Trophy size={14}/> LIVE LEADERBOARD</span><span><Zap size={14}/> 10 POINTS / RIGHT</span></div>
+          <div className="hero-pills"><span><Timer size={14}/> 20 SEC / QUESTION</span><span><Trophy size={14}/> LIVE LEADERBOARD</span><span><Zap size={14}/> 100 + SPEED BONUS</span></div>
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="halo halo-one"/><div className="halo halo-two"/>
@@ -271,13 +282,13 @@ function App() {
           <div className="admin-controls">
             {quizStatus === "draft" ? <button className="gold-button wide" disabled={busy || !(quiz?.participants?.length)} onClick={() => { if (window.confirm("Start the 20-question quiz now? Registration will close and the 20-second timer will apply to every question.")) adminAction("admin_start"); }}><Spade size={17}/> START QUIZ FOR EVERYONE</button> :
             quizStatus === "live" ? <button className="outline-button wide" disabled={busy} onClick={() => { if (window.confirm("End the quiz now? Participants will no longer be able to submit answers.")) adminAction("admin_finish"); }}>END QUIZ</button> :
-            <button className="gold-button wide" disabled={busy} onClick={() => { if (window.confirm("Reset all quiz attempts and reopen registration? Participant registrations will be preserved.")) adminAction("admin_reset"); }}><RotateCcw size={16}/> RESET QUIZ & REOPEN REGISTRATION</button>}
-            {quizStatus !== "draft" && <button className="danger-outline wide" disabled={busy} onClick={() => { if (window.confirm("Reset all quiz scores and reopen registration? Existing participant registrations will be retained.")) adminAction("admin_reset"); }}>RESET ROUND</button>}
+            <button className="gold-button wide" disabled={busy} onClick={() => { if (window.confirm("PERMANENT RESET: This will permanently delete ALL participant registrations and quiz attempts. Everyone will have to register again. This cannot be undone. Continue?")) adminAction("admin_reset"); }}><RotateCcw size={16}/> RESET QUIZ & REOPEN REGISTRATION</button>}
+            {quizStatus !== "draft" && <button className="danger-outline wide" disabled={busy} onClick={() => { if (window.confirm("PERMANENT RESET: This will permanently delete ALL participant registrations and quiz attempts. Everyone will have to register again. This cannot be undone. Continue?")) adminAction("admin_reset"); }}>RESET ROUND</button>}
           </div>
-          <div className="admin-note"><Shield size={16}/><span>Each participant gets one attempt. Answers are checked on the server. A timeout records an unanswered question and moves to the next one.</span></div>
+          <div className="admin-note"><Shield size={16}/><span>Each participant gets one attempt. Correct answers earn 100 points plus up to 20 speed-bonus points. Ranking prioritises correct answers, then speed. Deleting a participant permanently removes their registration. Reset permanently deletes every participant and reopens registration.</span></div>
           <div className="admin-section-head"><h3>REGISTERED PLAYERS</h3><span>{quiz?.participants?.length || 0} entries</span></div>
           <div className="participant-list">
-            {(quiz?.participants || []).filter((p:any) => !["left","disqualified"].includes(p.status)).map((p:any) => <div className="participant-row" key={p.id}><div className="avatar-chip">{(p.team_name || "?").slice(0,1).toUpperCase()}</div><div><b>{p.team_name}</b><small>{p.captain_name}</small></div><span className="player-state">{p.status?.toUpperCase()}</span></div>)}
+            {(quiz?.participants || []).filter((p:any) => !["left","disqualified"].includes(p.status)).map((p:any) => <div className="participant-row" key={p.id}><div className="avatar-chip">{(p.team_name || "?").slice(0,1).toUpperCase()}</div><div><b>{p.team_name}</b><small>{p.captain_name}</small></div><span className="player-state">{p.status?.toUpperCase()}</span><button className="delete-participant" disabled={busy} title={"Permanently delete " + p.team_name} onClick={() => deleteParticipant(p)}>DELETE</button></div>)}
             {!quiz?.participants?.length && <div className="empty-state">No registrations yet.</div>}
           </div>
         </div>
@@ -292,7 +303,7 @@ function App() {
               <><p>You're registered. The organiser will start the quiz shortly.</p><div className="waiting-box"><div className="pulse-dot"/><b>WAITING FOR THE ORGANISER</b><span>Keep this page open. It will update automatically when the quiz starts.</span></div></>}
           </div> : completed ? <div className="glass-card finish-card">
             <div className="finish-trophy"><Trophy size={44}/></div><div className="section-kicker">QUIZ COMPLETED</div><h2>YOU PLAYED YOUR HAND.</h2>
-            <div className="final-score"><b>{totalScore}</b><span>/ 200 POINTS</span></div>
+            <div className="final-score"><b>{totalScore}</b><span>/ 2,400 POINTS</span></div>
             <div className="finish-stats"><div><b>{attempt.correct_count}/20</b><small>CORRECT ANSWERS</small></div><div><b>{(attempt.total_time_ms/1000).toFixed(1)}s</b><small>TIME USED</small></div></div>
             <p>Your score is on the live leaderboard. Good game!</p>
           </div> : question ? <div className="glass-card question-card">
@@ -317,8 +328,8 @@ function App() {
       {result && <div className={"result-overlay " + (result.correct ? "is-correct" : "is-wrong")}>
         <div className="result-sparks">{Array.from({length:18},(_,i)=><i key={i} style={{"--i":i} as React.CSSProperties}/>)}</div>
         <div className="result-content">
-          {result.correct ? <><div className="result-icon"><Crown size={42}/></div><div className="result-kicker">THE CROWD GOES WILD</div><h2>NICE HAND!</h2><div className="points-pop">+10 POINTS</div><p>{result.category} · Correct answer {result.correct_option}</p><div className="reveal-cards">{(result.best_cards||[]).map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*90}/>)}</div><div className="chip-shower"><span>♠</span><span>♦</span><span>♣</span><span>♥</span><span>♠</span><span>♦</span><span>♣</span></div></> :
-          <><div className="result-icon fold-icon"><Spade size={40}/></div><div className="result-kicker">NOT THIS TIME</div><h2>FOLD!</h2><div className="points-pop muted-points">NO POINTS</div><p>Best answer: {result.correct_option} · {result.category}</p></>}
+          {result.correct ? <><div className="result-icon"><Crown size={42}/></div><div className="result-kicker">THE CROWD GOES WILD</div><h2>NICE HAND!</h2><div className="points-pop">+{result.points_earned} POINTS {result.speed_bonus > 0 ? "(+" + result.speed_bonus + " SPEED)" : ""}</div><h2 className="quip-title">{result.quip || "NICE HAND!"}</h2><p>{result.category} · Correct answer {result.correct_option}</p><div className="reveal-cards">{(result.best_cards||[]).map((c:CardData,i:number)=><PlayingCard key={i} card={c} size="tiny" delay={i*90}/>)}</div><div className="chip-shower"><span>♠</span><span>♦</span><span>♣</span><span>♥</span><span>♠</span><span>♦</span><span>♣</span></div></> :
+          <><div className="result-icon fold-icon"><Spade size={40}/></div><div className="result-kicker">NOT THIS TIME</div><h2 className="quip-title">{result.quip || "FOLD!"}</h2><div className="points-pop muted-points">NO POINTS</div><p>{result.timed_out ? "TIME'S UP! " : ""}Best answer: {result.correct_option} · {result.category}</p></>}
         </div>
       </div>}
       <footer className="site-footer"><span><b>♠ KING OF CHIPS 2.0</b> · FINCEPTION</span><span>PLAY SMART. PLAY FAIR. VIRTUAL CHIPS ONLY.</span></footer>
@@ -333,11 +344,11 @@ function Leaderboard({ rows, compact = false }: { rows: any[]; compact?: boolean
       {rows.slice(0, compact ? 8 : 20).map((p:any) => <div className={"leader-row " + (p.rank<=3 ? "top-rank" : "")} key={p.team_id}>
         <div className="rank-number">{p.rank===1?<Crown size={16}/>:p.rank<=3?<Medal size={15}/>:String(p.rank).padStart(2,"0")}</div>
         <div className="leader-name"><b>{p.team_name}</b><small>{p.captain_name}</small></div>
-        <div className="leader-points"><b>{p.score}</b><small>{p.correct_count}/20</small></div>
+        <div className="leader-points"><b>{p.score}</b><small>{p.correct_count}/20 RIGHT</small></div>
       </div>)}
       {!rows.length && <div className="empty-state">The leaderboard will appear once players finish questions.</div>}
     </div>
-    <div className="leaderboard-foot">RANKED BY SCORE · CORRECT ANSWERS · TIME</div>
+    <div className="leaderboard-foot">RANKED BY CORRECT ANSWERS · SPEED BONUS · TIME</div>
   </div>;
 }
 
