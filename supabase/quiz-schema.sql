@@ -55,3 +55,9 @@ create policy "quiz attempts denied to clients" on public.quiz_attempts
 insert into public.quiz_settings(tournament_id, status, question_seconds, question_count)
 select id, 'draft', 20, 20 from public.tournaments order by created_at limit 1
 on conflict (tournament_id) do nothing;
+
+
+-- Indexes for synchronized round polling and 60–70 concurrent participants
+create index if not exists quiz_attempts_tournament_team_idx on public.quiz_attempts (tournament_id, team_id);
+create index if not exists quiz_attempts_tournament_submission_idx on public.quiz_attempts (tournament_id, last_submitted_index);
+create index if not exists teams_tournament_created_idx on public.teams (tournament_id, created_at);
