@@ -31,16 +31,22 @@ The canonical database schema is in `supabase/schema.sql`. Production migrations
 The service-role key is used only inside Edge Functions and must never be added to Vercel's `VITE_*` variables or shipped to the browser. The browser receives only the publishable/anon key. Hole-card rows are protected by RLS; the deck column is not granted to authenticated clients.
 
 ## Granting tournament administrator access
-New accounts are created with the `participant` role. After the organiser creates and verifies their account, a project owner must promote the exact organiser email in Supabase SQL Editor:
+Before the organiser signs up, add their exact email to the private allowlist in Supabase SQL Editor:
 
 ```sql
-update public.profiles
-set role = 'admin'
-where user_id = (
-  select id from auth.users
-  where lower(email) = lower('ORGANISER_EMAIL')
-);
+insert into public.admin_allowlist(email)
+values (lower('ORGANISER_EMAIL'))
+on conflict do nothing;
 ```
+
+Then the organiser signs up using that exact email. The auth trigger assigns the admin role automatically. If the account already exists, use this one-time promotion instead:
+
+```sql
+update public.profiles set role = 'admin'
+where user_id = (select id from auth.users where lower(email)=lower('ORGANISER_EMAIL'));
+```
+
+The allowlist is not readable by anon or authenticated users.
 
 Never expose admin promotion as a public client-side action. Keep at least two trusted organisers as admins if appropriate.
 
