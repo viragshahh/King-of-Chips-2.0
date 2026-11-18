@@ -133,23 +133,24 @@ Deno.serve(async(req:Request)=>{
       // The organiser tab is the single round coordinator. Participants only read state,
       // avoiding N simultaneous timeout/phase-transition sweeps at the same deadline.
       if(isAdmin) await reconcile();
-      const {data:attempt}=team?await db.from("quiz_attempts").select("*").eq("tournament_id",t.id).eq("team_id",team.id).maybeSingle():{data:null};
       const idx=Number(settings.current_index||0);
       let attempts:any[]=[];
       let submitted=0,totalParticipants=0;
+      const [attemptResult,progressResult] = await Promise.all([
+        team?db.from("quiz_attempts").select("*").eq("tournament_id",t.id).eq("team_id",team.id).maybeSingle():Promise.resolve({data:null,error:null}),
+        isAdmin?Promise.resolve({data:null,error:null}):db.from("quiz_attempts").select("id,last_submitted_index").eq("tournament_id",t.id)
+      ]);
+      if(attemptResult.error)throw attemptResult.error;
+      const attempt=attemptResult.data;
       if(isAdmin){
         attempts=await getAttempts();
         submitted=attempts.filter((a:any)=>Number(a.last_submitted_index)>=idx).length;
         totalParticipants=attempts.length;
       }else{
-        const [submittedQuery,totalQuery]=await Promise.all([
-          db.from("quiz_attempts").select("id",{count:"exact",head:true}).eq("tournament_id",t.id).gte("last_submitted_index",idx),
-          db.from("quiz_attempts").select("id",{count:"exact",head:true}).eq("tournament_id",t.id)
-        ]);
-        if(submittedQuery.error)throw submittedQuery.error;
-        if(totalQuery.error)throw totalQuery.error;
-        submitted=submittedQuery.count||0;
-        totalParticipants=totalQuery.count||0;
+        if(progressResult.error)throw progressResult.error;
+        const progress=progressResult.data||[];
+        totalParticipants=progress.length;
+        submitted=progress.filter((a:any)=>Number(a.last_submitted_index)>=idx).length;
       }
       const seconds=Number(settings.question_seconds||20);
       const remaining=settings.phase==="question"&&settings.question_started_at?Math.max(0,Math.ceil((new Date(settings.question_started_at).getTime()+seconds*1000-Date.now())/1000)):0;
