@@ -88,9 +88,12 @@ function App() {
       if (!s) {
         const { data: guest, error: guestError } = await supabase.auth.signInAnonymously();
         if (guestError) {
+          const rateLimited = guestError.status === 429 || guestError.code === "over_request_rate_limit" || /rate limit|too many requests/i.test(guestError.message || "");
           if (alive) setError(guestError.code === "anonymous_provider_disabled"
             ? "Anonymous sign-ins are disabled. Enable Anonymous Sign-Ins in Supabase Authentication, then reload."
-            : "Could not create a participant session: " + guestError.message);
+            : rateLimited
+              ? "Registration is temporarily busy. Please wait a minute and refresh. The organiser should raise Supabase Authentication > Rate Limits > Anonymous Sign-Ins to at least 200 per hour per IP for this event."
+              : "Could not create a participant session: " + guestError.message);
           if (alive) setLoading(false);
           return;
         }
