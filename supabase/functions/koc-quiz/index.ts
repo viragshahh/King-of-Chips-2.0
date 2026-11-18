@@ -129,11 +129,27 @@ Deno.serve(async(req:Request)=>{
       if(latestError)throw latestError;settings=latest;
     };
     if(b.action==="state"){
-      await reconcile();
+      // The organiser tab is the single round coordinator. Participants only read state,
+      // avoiding N simultaneous timeout/phase-transition sweeps at the same deadline.
+      if(isAdmin) await reconcile();
       const {data:attempt}=team?await db.from("quiz_attempts").select("*").eq("tournament_id",t.id).eq("team_id",team.id).maybeSingle():{data:null};
-      const attempts=await getAttempts();
       const idx=Number(settings.current_index||0);
-      const submitted=attempts.filter((a:any)=>Number(a.last_submitted_index)>=idx).length;
+      let attempts:any[]=[];
+      let submitted=0,totalParticipants=0;
+      if(isAdmin){
+        attempts=await getAttempts();
+        submitted=attempts.filter((a:any)=>Number(a.last_submitted_index)>=idx).length;
+        totalParticipants=attempts.length;
+      }else{
+        const [submittedQuery,totalQuery]=await Promise.all([
+          db.from("quiz_attempts").select("id",{count:"exact",head:true}).eq("tournament_id",t.id).gte("last_submitted_index",idx),
+          db.from("quiz_attempts").select("id",{count:"exact",head:true}).eq("tournament_id",t.id)
+        ]);
+        if(submittedQuery.error)throw submittedQuery.error;
+        if(totalQuery.error)throw totalQuery.error;
+        submitted=submittedQuery.count||0;
+        totalParticipants=totalQuery.count||0;
+      }
       const seconds=Number(settings.question_seconds||20);
       const remaining=settings.phase==="question"&&settings.question_started_at?Math.max(0,Math.ceil((new Date(settings.question_started_at).getTime()+seconds*1000-Date.now())/1000)):0;
       const board=await leaderboard();
@@ -146,7 +162,7 @@ Deno.serve(async(req:Request)=>{
         speed_bonus:answer.correct?Math.max(0,Math.ceil((seconds*1000-Number(answer.response_ms||0))/1000)):0,
         timed_out:!answer.selected_option,best_cards:questions[idx]?.best_cards||[]
       }:null;
-      return out({tournament:{id:t.id,status:t.status,name:t.name},settings,team,is_admin:isAdmin,attempt,questions:publicQuestions,admin_questions:isAdmin?questions:undefined,leaderboard:board,participants:participantProgress,last_round_result:lastRoundResult,round:{phase:settings.phase,current_index:idx,submitted_count:submitted,total_participants:attempts.length,seconds_remaining:remaining,leaderboard_seconds_remaining:settings.phase==="leaderboard"&&settings.phase_started_at?Math.max(0,5-Math.floor((Date.now()-new Date(settings.phase_started_at).getTime())/1000)):0}});
+      return out({tournament:{id:t.id,status:t.status,name:t.name},settings,team,is_admin:isAdmin,attempt,questions:publicQuestions,admin_questions:isAdmin?questions:undefined,leaderboard:board,participants:participantProgress,last_round_result:lastRoundResult,round:{phase:settings.phase,current_index:idx,submitted_count:submitted,total_participants:totalParticipants,seconds_remaining:remaining,leaderboard_seconds_remaining:settings.phase==="leaderboard"&&settings.phase_started_at?Math.max(0,5-Math.floor((Date.now()-new Date(settings.phase_started_at).getTime())/1000)):0}});
     }
     if(b.action==="admin_delete_participant"){
       requireAdmin();
